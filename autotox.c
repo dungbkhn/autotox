@@ -386,64 +386,7 @@ void arepl_reprint(struct AsyncREPL *arepl) {
 #define _AREPL_CURSOR_LEFT() arepl->line[arepl->sz - (++arepl->nstack)] = arepl->line[--arepl->nbuf]
 #define _AREPL_CURSOR_RIGHT() arepl->line[arepl->nbuf++] = arepl->line[arepl->sz - (arepl->nstack--)]
 
-int arepl_readline(struct AsyncREPL *arepl, char c, char *line, size_t sz){
-    static uint32_t escaped = 0;
-    if (c == '\033') { // mark escape code
-        escaped = 1;
-        return 0;
-    }
 
-    if (escaped>0) escaped++;
-
-    switch (c) {
-        case '\n': {
-            int ret = snprintf(line, sz, "%.*s%.*s\n",(int)arepl->nbuf, arepl->line, (int)arepl->nstack, arepl->line + arepl->sz - arepl->nstack);
-            arepl->nbuf = 0;
-            arepl->nstack = 0;
-            return ret;
-        }
-
-        case '\010':  // C-h
-        case '\177':  // Backspace
-            if (arepl->nbuf > 0) arepl->nbuf--;
-            break;
-        case '\025': // C-u
-            arepl->nbuf = 0;
-            break;
-        case '\013': // C-k Vertical Tab
-            arepl->nstack = 0;
-            break;
-        case '\001': // C-a
-            while (arepl->nbuf > 0) _AREPL_CURSOR_LEFT();
-            break;
-        case '\005': // C-e
-            while (arepl->nstack > 0) _AREPL_CURSOR_RIGHT();
-            break;
-        case '\002': // C-b
-            if (arepl->nbuf > 0) _AREPL_CURSOR_LEFT();
-            break;
-        case '\006': // C-f
-            if (arepl->nstack > 0) _AREPL_CURSOR_RIGHT();
-            break;
-        case '\027': // C-w: backward delete a word
-            while (arepl->nbuf>0 && arepl->line[arepl->nbuf-1] == ' ') arepl->nbuf--;
-            while (arepl->nbuf>0 && arepl->line[arepl->nbuf-1] != ' ') arepl->nbuf--;
-            break;
-
-        case 'D':
-        case 'C':
-            if (escaped == 3 && arepl->nbuf >= 1 && arepl->line[arepl->nbuf-1] == '[') { // arrow keys
-                arepl->nbuf--;
-                if (c == 'D' && arepl->nbuf > 0) _AREPL_CURSOR_LEFT(); // left arrow: \033[D
-                if (c == 'C' && arepl->nstack > 0) _AREPL_CURSOR_RIGHT(); // right arrow: \033[C
-                break;
-            }
-            // fall through to default case
-        default:
-            arepl->line[arepl->nbuf++] = c;
-    }
-    return 0;
-}
 
 /*******************************************************************************
  *
@@ -465,7 +408,9 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
     if (GEN_INDEX(friend_num, TALK_TYPE_FRIEND) == TalkingTo) {
         PRINT("%s", msg);
     } else {
-        INFO("* receive message from %s, use `/go <contact_index>` to talk\n",f->name);
+        INFO("* receive message from %s, autoreplied to remote\n",f->name);
+        char *msg="autoreply";
+         tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)msg, strlen(msg), NULL);
     }
 }
 
@@ -999,12 +944,6 @@ struct Command commands[] = {
         command_contacts,
     },
     {
-        "go",
-        "[<contact_index>] - goto talk to a contact, or goto cmd mode if <contact_index> is empty.",
-        0 + COMMAND_ARGS_REST,
-        command_go,
-    },
-    {
         "savefile",
         "[<file_index>] - save file.",
         0 + COMMAND_ARGS_REST,
@@ -1093,7 +1032,6 @@ void onFileRecv(Tox *m, uint32_t friendnum, uint32_t filenumber, uint64_t file_s
     tox_file_get_file_id(m, friendnum, filenumber, ft->file_id, NULL);
 
     free(file_path);
-    
     
 }
 
@@ -1212,77 +1150,6 @@ char *poptok(char **strp) {
     return save;
 }
 
-void repl_iterate(void){
-    static char buf[128];
-    static char line[LINE_MAX_SIZE];
-    while (1) {
-        int n = read(NEW_STDIN_FILENO, buf, sizeof(buf));
-        if (n <= 0) {
-            break;
-        }
-        for (int i=0;i<n;i++) { // for_1
-            char c = buf[i];
-            if (c == '\004')          /* C-d */
-                exit(0);
-            if (!arepl_readline(async_repl, c, line, sizeof(line))) continue; // continue to for_1
-
-            int len = strlen(line);
-            line[--len] = '\0'; // remove trailing \n
-
-            if (TalkingTo != TALK_TYPE_NULL && line[0] != '/') {  // if talking to someone, just print the msg out.
-                struct ChatHist **hp = get_current_histp();
-                if (!hp) {
-                    ERROR("! You are not talking to someone. use `/go` to return to cmd mode");
-                    continue; // continue to for_1
-                }
-                char *msg = genmsg(hp, SELF_MSG_PREFIX "%.*s", getftime(), self.name, len, line);
-                PRINT("%s", msg);
-                switch (INDEX_TO_TYPE(TalkingTo)) {
-                    case TALK_TYPE_FRIEND:
-                        tox_friend_send_message(tox, INDEX_TO_NUM(TalkingTo), TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)line, strlen(line), NULL);
-                        continue; // continue to for_1
-                    
-                }
-            }
-
-            PRINT(CMD_MSG_PREFIX "%s", line);  // take this input line as a command.
-            if (len == 0) continue; // continue to for_1.  ignore empty line
-
-            if (line[0] == '/') {
-                char *l = line + 1; // skip leading '/'
-                char *cmdname = poptok(&l);
-                struct Command *cmd = NULL;
-                for (int j=0; j<COMMAND_LENGTH;j++){ // for_2
-                    if (strcmp(commands[j].name, cmdname) == 0) {
-                        cmd = &commands[j];
-                        break; // break for_2
-                    }
-                }
-                if (cmd) {
-                    char *tokens[cmd->narg];
-                    int ntok = 0;
-                    for (; l != NULL && ntok != cmd->narg; ntok++) {
-                        // if it's the last arg, then take the rest line.
-                        char *tok = (ntok == cmd->narg - 1) ? l : poptok(&l);
-                        tokens[ntok] = tok;
-                    }
-                    if (ntok < cmd->narg - (cmd->narg >= COMMAND_ARGS_REST ? COMMAND_ARGS_REST : 0)) {
-                        WARN("Wrong number of cmd args");
-                    } else {
-                        cmd->handler(ntok, tokens);
-                        if (SAVEDATA_AFTER_COMMAND) update_savedata_file();
-                    }
-                    continue; // continue to for_1
-                }
-            }
-
-            WARN("! Invalid command, use `/help` to get list of available commands.");
-        } // end for_1
-    } // end while
-    arepl_reprint(async_repl);
-}
-
-
 
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
@@ -1302,13 +1169,10 @@ int main(int argc, char **argv) {
 
     uint32_t msecs = 0;
     while (1) {
-        if (msecs >= AREPL_INTERVAL) {
-            msecs = 0;
-            repl_iterate();
-        }
+
         tox_iterate(tox, NULL);
         uint32_t v = tox_iteration_interval(tox);
-        msecs += v;
+
 
         struct timespec pause;
         pause.tv_sec = 0;
