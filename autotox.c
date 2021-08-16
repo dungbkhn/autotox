@@ -297,96 +297,6 @@ struct ChatHist ** get_current_histp(void) {
     return NULL;
 }
 
-/*******************************************************************************
- *
- * Async REPL
- *
- ******************************************************************************/
-
-struct AsyncREPL {
-    char *line;
-    char *prompt;
-    size_t sz;
-    int  nbuf;
-    int nstack;
-};
-
-struct termios saved_tattr;
-
-struct AsyncREPL *async_repl;
-
-void arepl_exit(void) {
-    tcsetattr(NEW_STDIN_FILENO, TCSAFLUSH, &saved_tattr);
-}
-
-void setup_arepl(void) {
-    if (!(isatty(STDIN_FILENO) && isatty(STDOUT_FILENO))) {
-        fputs("! stdout & stdin should be connected to tty", stderr);
-        exit(1);
-    }
-    async_repl = malloc(sizeof(struct AsyncREPL));
-    async_repl->nbuf = 0;
-    async_repl->nstack = 0;
-    async_repl->sz = LINE_MAX_SIZE;
-    async_repl->line = malloc(LINE_MAX_SIZE);
-    async_repl->prompt = malloc(LINE_MAX_SIZE);
-
-    strcpy(async_repl->prompt, CMD_PROMPT);
-
-    // stdin and stdout may share the same file obj,
-    // reopen stdin to avoid accidentally getting stdout modified.
-
-    char stdin_path[4080];  // 4080 is large enough for a path length for *nix system.
-#ifdef F_GETPATH   // macosx
-    if (fcntl(STDIN_FILENO, F_GETPATH, stdin_path) == -1) {
-        fputs("! fcntl get stdin filepath failed", stderr);
-        exit(1);
-    }
-#else  // linux
-    if (readlink("/proc/self/fd/0", stdin_path, sizeof(stdin_path)) == -1) {
-        fputs("! get stdin filename failed", stderr);
-        exit(1);
-    }
-#endif
-
-    NEW_STDIN_FILENO = open(stdin_path, O_RDONLY);
-    if (NEW_STDIN_FILENO == -1) {
-        fputs("! reopen stdin failed",stderr);
-        exit(1);
-    }
-    close(STDIN_FILENO);
-
-    // Set stdin to Non-Blocking
-    int flags = fcntl(NEW_STDIN_FILENO, F_GETFL, 0);
-    fcntl(NEW_STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
-
-    /* Set stdin to Non-Canonical terminal mode. */
-    struct termios tattr;
-    tcgetattr(NEW_STDIN_FILENO, &tattr);
-    saved_tattr = tattr;  // save it to restore when exit
-    tattr.c_lflag &= ~(ICANON|ECHO); /* Clear ICANON. */
-    tattr.c_cc[VMIN] = 1;
-    tattr.c_cc[VTIME] = 0;
-    tcsetattr(NEW_STDIN_FILENO, TCSAFLUSH, &tattr);
-
-    atexit(arepl_exit);
-}
-
-void arepl_reprint(struct AsyncREPL *arepl) {
-    fputs(CODE_ERASE_LINE, stdout);
-    if (arepl->prompt) fputs(arepl->prompt, stdout);
-    if (arepl->nbuf > 0) printf("%.*s", arepl->nbuf, arepl->line);
-    if (arepl->nstack > 0) {
-        printf("%.*s",(int)arepl->nstack, arepl->line + arepl->sz - arepl->nstack);
-        printf("\033[%dD",arepl->nstack); // move cursor
-    }
-    fflush(stdout);
-}
-
-#define _AREPL_CURSOR_LEFT() arepl->line[arepl->sz - (++arepl->nstack)] = arepl->line[--arepl->nbuf]
-#define _AREPL_CURSOR_RIGHT() arepl->line[arepl->nbuf++] = arepl->line[arepl->sz - (arepl->nstack--)]
-
-
 
 /*******************************************************************************
  *
@@ -422,7 +332,7 @@ void friend_name_cb(Tox *tox, uint32_t friend_num, const uint8_t *name, size_t l
         sprintf(f->name, "%.*s", (int)length, (char*)name);
         if (GEN_INDEX(friend_num, TALK_TYPE_FRIEND) == TalkingTo) {
             INFO("* Opposite changed name to %.*s", (int)length, (char*)name)
-            sprintf(async_repl->prompt, FRIEND_TALK_PROMPT, f->name);
+            //sprintf(async_repl->prompt, FRIEND_TALK_PROMPT, f->name);
         }
     }
 }
@@ -791,31 +701,7 @@ void command_save(int narg, char **args) {
     update_savedata_file();
 }
 
-void command_go(int narg, char **args) {
-    if (narg == 0) {
-        TalkingTo = TALK_TYPE_NULL;
-        strcpy(async_repl->prompt, CMD_PROMPT);
-        return;
-    }
-    uint32_t contact_idx;
-    if (!str2uint(args[0], &contact_idx)) goto FAIL;
-    uint32_t num = INDEX_TO_NUM(contact_idx);
-    switch (INDEX_TO_TYPE(contact_idx)) {
-        case TALK_TYPE_FRIEND: {
-            struct Friend *f = getfriend(num);
-            if (f) {
-                TalkingTo = contact_idx;
-                sprintf(async_repl->prompt, FRIEND_TALK_PROMPT, f->name);
-                return;
-            }
-            break;
-        }
-        
-    }
 
-FAIL:
-    WARN("^ Invalid contact index");
-}
 
 void cmd_savefile(Tox *m, struct Friend *f, int argc, char **argv);
 void command_savefile(int narg, char **args) {
@@ -1153,16 +1039,13 @@ char *poptok(char **strp) {
 
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
-        fputs("Usage: minitox\n", stdout);
+        fputs("Usage: autotox\n", stdout);
         fputs("\n", stdout);
-        fputs("Minitox does not take any arguments.\n", stdout);
+        fputs("Autotox does not take any arguments.\n", stdout);
         return 0;
     }
 
-    fputs("Type `/guide` to print the guide.\n", stdout);
-    fputs("Type `/help` to print command list.\n\n",stdout);
-
-    setup_arepl();
+ 
     setup_tox();
 
     INFO("* Waiting to be online ...");
