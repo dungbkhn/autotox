@@ -891,27 +891,7 @@ FAIL:
         
 }
 
-void command_history(int narg, char **args) {
-    uint32_t n = DEFAULT_CHAT_HIST_COUNT;
-    if (narg > 0 && !str2uint(args[0], &n)) {
-        WARN("Invalid args");
-    }
 
-    struct ChatHist **hp = get_current_histp();
-    if (!hp) {
-        WARN("you are not talking to someone");
-        return;
-    }
-
-    struct ChatHist *hist = *hp;
-
-    while (hist && hist->next) hist = hist->next;
-    PRINT("%s", "------------ HISTORY BEGIN ---------------")
-    for (int i=0;i<n && hist; i++,hist=hist->prev) {
-        printf("%s\n", hist->msg);
-    }
-    PRINT("%s", "------------ HISTORY   END ---------------")
-}
 
 void _command_accept(int narg, char **args, bool is_accept) {
     if (narg == 0) {
@@ -1029,12 +1009,6 @@ struct Command commands[] = {
         "[<file_index>] - save file.",
         0 + COMMAND_ARGS_REST,
         command_savefile,
-    },
-    {
-        "history",
-        "[<n>] - show previous <n> items(default:10) of current chat history",
-        0 + COMMAND_ARGS_REST,
-        command_history,
     },
     {
         "accept",
