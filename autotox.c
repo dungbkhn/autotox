@@ -31,20 +31,7 @@
 const char *savedata_filename = "./savedata.tox";
 const char *savedata_tmp_filename = "./savedata.tox.tmp";
 
-struct DHT_node {
-    const char *ip;
-    uint16_t port;
-    const char key_hex[TOX_PUBLIC_KEY_SIZE*2 + 1];
-};
 
-struct DHT_node bootstrap_nodes[] = {
-
-    // Setup tox bootrap nodes
-
-    {"node.tox.biribiri.org",      33445, "F404ABAA1C99A9D37D61AB54898F56793E1DEF8BD46B1038B9D822E8460FAB67"},
-    {"128.199.199.197",            33445, "B05C8869DBB4EDDD308F43C1A974A20A725A36EACCA123862FDE9945BF9D3E09"},
-    {"2400:6180:0:d0::17a:a001",   33445, "B05C8869DBB4EDDD308F43C1A974A20A725A36EACCA123862FDE9945BF9D3E09"},
-};
 
 #define LINE_MAX_SIZE 512  // If input line's length surpassed this value, it will be truncated.
 
@@ -687,20 +674,13 @@ void update_savedata_file(void)
     free(savedata);
 }
 
-void bootstrap(void)
-{
-    for (size_t i = 0; i < sizeof(bootstrap_nodes)/sizeof(struct DHT_node); i ++) {
-        uint8_t *bin = hex2bin(bootstrap_nodes[i].key_hex);
-        tox_bootstrap(tox, bootstrap_nodes[i].ip, bootstrap_nodes[i].port, bin, NULL);
-        free(bin);
-    }
-}
+
 
 void setup_tox(void)
 {
     create_tox();
     init_friends();
-    bootstrap();
+
 
     ////// register callbacks
 
