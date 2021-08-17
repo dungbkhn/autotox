@@ -578,7 +578,7 @@ void friend_request_cb(Tox *tox, const uint8_t *public_key, const uint8_t *messa
     
    if (strcmp((char*)message, "autotox") == 0){
 	   INFO("* xin lam ban ok, tu dong autoaccept");
-	   //auto_accept(1,"1",true);
+	   auto_accept(1,"1",true);
    }
    else{
 	   INFO("* !xin lam ban not ok");
