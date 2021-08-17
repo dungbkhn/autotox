@@ -458,6 +458,46 @@ int arepl_readline(struct AsyncREPL *arepl, char c, char *line, size_t sz){
 
 /*******************************************************************************
  *
+ * Get IP Addr
+ *
+ ******************************************************************************/
+
+char *getIpAddr() {
+	char cmd[256]="/sbin/ifconfig | grep inet";
+	FILE * stream;
+	char buffer[256];
+	size_t n,m;
+	char *out=NULL;
+	
+	stream = popen(cmd, "r");
+	if (stream) {
+		while (!feof(stream)){
+			if (fgets(buffer, 256, stream) != NULL){
+				//PRINT("ExecutionRes:%s %d",buffer,(unsigned)strlen(buffer));
+				n = strlen(buffer);
+				buffer[n]='\0';
+				//PRINT("%ldExecutionRes:%s\n",n,buffer);
+				if(out==NULL){
+					out=(char*)malloc(n);
+					strcpy(out, buffer);
+					m=n;
+				}
+				else{
+					m=m+n;
+					out=(char*)realloc(out,m);
+					strcat(out,buffer);
+				}
+			}
+		}
+		pclose(stream);
+	}
+
+	
+	return out;
+}
+
+/*******************************************************************************
+ *
  * Tox Callbacks
  *
  ******************************************************************************/
@@ -477,6 +517,8 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
         PRINT("%s", msg);
     } else {
         INFO("* receive message from %s, use `/go <contact_index>` to talk\n",f->name);
+        char *ipaddr=getIpAddr();
+        tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)ipaddr, strlen(ipaddr), NULL);
     }
 }
 
@@ -515,6 +557,7 @@ void friend_connection_status_cb(Tox *tox, uint32_t friend_num, TOX_CONNECTION c
     }
 }
 
+void auto_accept(int narg, char *args, bool is_accept) ;
 void friend_request_cb(Tox *tox, const uint8_t *public_key, const uint8_t *message, size_t length, void *user_data) {
     INFO("* receive friend request(use `/accept` to see).");
 
@@ -528,12 +571,16 @@ void friend_request_cb(Tox *tox, const uint8_t *public_key, const uint8_t *messa
     req->next = requests;
     requests = req;
     
-    char buffer[1024];
-    snprintf(buffer, sizeof(buffer), "%s\n",(char*)message);
-    writetologfile(buffer);
+    //char buffer[1024];
+    //snprintf(buffer, sizeof(buffer), "%s\n",(char*)message);
+    //writetologfile(buffer);
     
-   if (strcmp((char*)message, "connect_to_autotox") == 0){
-	   INFO("giong nhau");
+   if (strcmp((char*)message, "autotox") == 0){
+	   INFO("* xin lam ban ok, tu dong autoaccept");
+	   auto_accept(1,"1",true);
+   }
+   else{
+	   INFO("* !xin lam ban not ok");
    }
 }
 
@@ -916,8 +963,46 @@ FAIL:
         
 }
 
+void auto_accept(int narg, char *args, bool is_accept) {
+	PRINT("in auto_accept narg=%d %s",narg,args);
+    if (narg == 0) {
+        struct Request * req = requests;
+        for (;req != NULL;req=req->next) {
+            PRINT("%-9u%-12s%s", req->id, (req->is_friend_request ? "FRIEND" : "NOT SUPPORTED"), req->msg);
+        }
+        return;
+    }
+
+    uint32_t request_idx;
+    if (!str2uint(args, &request_idx)) goto FAIL;
+    struct Request **p = &requests;
+    LIST_FIND(p, (*p)->id == request_idx);
+    struct Request *req = *p;
+    if (req) {
+        *p = req->next;
+        if (is_accept) {
+            if (req->is_friend_request) {
+                TOX_ERR_FRIEND_ADD err;
+                uint32_t friend_num = tox_friend_add_norequest(tox, req->userdata.friend.pubkey, &err);
+                if (err != TOX_ERR_FRIEND_ADD_OK) {
+                    ERROR("! accept friend request failed, errcode:%d", err);
+                    writetologfile("! accept friend request failed, errcode");
+                } else {
+                    addfriend(friend_num);
+                    writetologfile("accept friend ok");
+                }
+            }
+        }
+        free(req->msg);
+        free(req);
+        return;
+    }
+FAIL:
+    WARN("Invalid request index");
+}
 
 void _command_accept(int narg, char **args, bool is_accept) {
+	PRINT("in _command_accept narg=%d %s",narg,args[0]);
     if (narg == 0) {
         struct Request * req = requests;
         for (;req != NULL;req=req->next) {
@@ -1309,8 +1394,8 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    fputs("Type `/guide` to print the guide.\n", stdout);
-    fputs("Type `/help` to print command list.\n\n",stdout);
+    //fputs("Type `/guide` to print the guide.\n", stdout);
+    //fputs("Type `/help` to print command list.\n\n",stdout);
 
     //setup_arepl();
     setup_tox();
@@ -1354,7 +1439,7 @@ int main(int argc, char **argv) {
 	}
 
     //log contacts
-    hex="#Friends(conctact_index|name|connection|status message):\n";
+    hex="#Friends(conctact_index|name|connection|status message):";
     writetologfile(hex);
     char buffer[1024];
     struct Friend *f = friends;
@@ -1363,6 +1448,10 @@ int main(int argc, char **argv) {
 		writetologfile(buffer);
 		memset(buffer,0,1024);
     }
+    
+    //hex="Get Ip Addr:";
+    //writetologfile(hex);
+    //writetologfile(getIpAddr());
     
     INFO("* Waiting to be online ...");
 
