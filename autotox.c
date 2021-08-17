@@ -558,6 +558,7 @@ void friend_connection_status_cb(Tox *tox, uint32_t friend_num, TOX_CONNECTION c
 }
 
 void auto_accept(int narg, char *args, bool is_accept) ;
+void update_savedata_file(void);
 void friend_request_cb(Tox *tox, const uint8_t *public_key, const uint8_t *message, size_t length, void *user_data) {
     INFO("* receive friend request(use `/accept` to see).");
 
@@ -577,7 +578,7 @@ void friend_request_cb(Tox *tox, const uint8_t *public_key, const uint8_t *messa
     
    if (strcmp((char*)message, "autotox") == 0){
 	   INFO("* xin lam ban ok, tu dong autoaccept");
-	   auto_accept(1,"1",true);
+	   //auto_accept(1,"1",true);
    }
    else{
 	   INFO("* !xin lam ban not ok");
@@ -1397,7 +1398,7 @@ int main(int argc, char **argv) {
     //fputs("Type `/guide` to print the guide.\n", stdout);
     //fputs("Type `/help` to print command list.\n\n",stdout);
 
-    //setup_arepl();
+    setup_arepl();
     setup_tox();
     //auto_del("0");
             
@@ -1459,7 +1460,7 @@ int main(int argc, char **argv) {
     while (1) {
         if (msecs >= AREPL_INTERVAL) {
             msecs = 0;
-            //repl_iterate();
+            repl_iterate();
         }
         tox_iterate(tox, NULL);
         uint32_t v = tox_iteration_interval(tox);
