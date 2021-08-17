@@ -1,6 +1,4 @@
-/*
- * AutoTox 
- */
+
 
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
@@ -31,7 +29,20 @@
 const char *savedata_filename = "./savedata.tox";
 const char *savedata_tmp_filename = "./savedata.tox.tmp";
 
+struct DHT_node {
+    const char *ip;
+    uint16_t port;
+    const char key_hex[TOX_PUBLIC_KEY_SIZE*2 + 1];
+};
 
+struct DHT_node bootstrap_nodes[] = {
+
+    // Setup tox bootrap nodes
+
+    {"node.tox.biribiri.org",      33445, "F404ABAA1C99A9D37D61AB54898F56793E1DEF8BD46B1038B9D822E8460FAB67"},
+    {"128.199.199.197",            33445, "B05C8869DBB4EDDD308F43C1A974A20A725A36EACCA123862FDE9945BF9D3E09"},
+    {"2400:6180:0:d0::17a:a001",   33445, "B05C8869DBB4EDDD308F43C1A974A20A725A36EACCA123862FDE9945BF9D3E09"},
+};
 
 #define LINE_MAX_SIZE 512  // If input line's length surpassed this value, it will be truncated.
 
@@ -87,11 +98,13 @@ struct Command {
 };
 
 
+
 struct FriendUserData {
     uint8_t pubkey[TOX_PUBLIC_KEY_SIZE];
 };
 
 union RequestUserData {
+
     struct FriendUserData friend;
 };
 
@@ -111,8 +124,6 @@ struct ChatHist {
 
 
 
-
-
 int NEW_STDIN_FILENO = STDIN_FILENO;
 
 struct Request *requests = NULL;
@@ -126,7 +137,7 @@ enum TALK_TYPE { TALK_TYPE_FRIEND, TALK_TYPE_COUNT, TALK_TYPE_NULL = UINT32_MAX 
 uint32_t TalkingTo = TALK_TYPE_NULL;
 
 
-
+void writetologfile(char *msg);
 
 bool str2uint(char *str, uint32_t *num) {
     char *str_end;
@@ -261,7 +272,6 @@ bool delfriend(uint32_t friend_num) {
     return 0;
 }
 
-
 uint8_t *hex2bin(const char *hex)
 {
     size_t len = strlen(hex) / 2;
@@ -297,6 +307,154 @@ struct ChatHist ** get_current_histp(void) {
     return NULL;
 }
 
+/*******************************************************************************
+ *
+ * Async REPL
+ *
+ ******************************************************************************/
+
+struct AsyncREPL {
+    char *line;
+    char *prompt;
+    size_t sz;
+    int  nbuf;
+    int nstack;
+};
+
+struct termios saved_tattr;
+
+struct AsyncREPL *async_repl;
+
+void arepl_exit(void) {
+    tcsetattr(NEW_STDIN_FILENO, TCSAFLUSH, &saved_tattr);
+}
+
+void setup_arepl(void) {
+    if (!(isatty(STDIN_FILENO) && isatty(STDOUT_FILENO))) {
+        fputs("! stdout & stdin should be connected to tty", stderr);
+        exit(1);
+    }
+    async_repl = malloc(sizeof(struct AsyncREPL));
+    async_repl->nbuf = 0;
+    async_repl->nstack = 0;
+    async_repl->sz = LINE_MAX_SIZE;
+    async_repl->line = malloc(LINE_MAX_SIZE);
+    async_repl->prompt = malloc(LINE_MAX_SIZE);
+
+    strcpy(async_repl->prompt, CMD_PROMPT);
+
+    // stdin and stdout may share the same file obj,
+    // reopen stdin to avoid accidentally getting stdout modified.
+
+    char stdin_path[4080];  // 4080 is large enough for a path length for *nix system.
+#ifdef F_GETPATH   // macosx
+    if (fcntl(STDIN_FILENO, F_GETPATH, stdin_path) == -1) {
+        fputs("! fcntl get stdin filepath failed", stderr);
+        exit(1);
+    }
+#else  // linux
+    if (readlink("/proc/self/fd/0", stdin_path, sizeof(stdin_path)) == -1) {
+        fputs("! get stdin filename failed", stderr);
+        exit(1);
+    }
+#endif
+
+    /*NEW_STDIN_FILENO = open(stdin_path, O_RDONLY);
+    if (NEW_STDIN_FILENO == -1) {
+        fputs("! reopen stdin failed",stderr);
+        exit(1);
+    }
+    close(STDIN_FILENO);
+*/
+
+    // Set stdin to Non-Blocking
+    int flags = fcntl(NEW_STDIN_FILENO, F_GETFL, 0);
+    fcntl(NEW_STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+
+    // Set stdin to Non-Canonical terminal mode. 
+    struct termios tattr;
+    tcgetattr(NEW_STDIN_FILENO, &tattr);
+    saved_tattr = tattr;  // save it to restore when exit
+    tattr.c_lflag &= ~(ICANON|ECHO); // Clear ICANON. 
+    tattr.c_cc[VMIN] = 1;
+    tattr.c_cc[VTIME] = 0;
+    tcsetattr(NEW_STDIN_FILENO, TCSAFLUSH, &tattr);
+
+    atexit(arepl_exit);
+}
+
+void arepl_reprint(struct AsyncREPL *arepl) {
+    fputs(CODE_ERASE_LINE, stdout);
+    if (arepl->prompt) fputs(arepl->prompt, stdout);
+    if (arepl->nbuf > 0) printf("%.*s", arepl->nbuf, arepl->line);
+    if (arepl->nstack > 0) {
+        printf("%.*s",(int)arepl->nstack, arepl->line + arepl->sz - arepl->nstack);
+        printf("\033[%dD",arepl->nstack); // move cursor
+    }
+    fflush(stdout);
+}
+
+#define _AREPL_CURSOR_LEFT() arepl->line[arepl->sz - (++arepl->nstack)] = arepl->line[--arepl->nbuf]
+#define _AREPL_CURSOR_RIGHT() arepl->line[arepl->nbuf++] = arepl->line[arepl->sz - (arepl->nstack--)]
+
+int arepl_readline(struct AsyncREPL *arepl, char c, char *line, size_t sz){
+    static uint32_t escaped = 0;
+    if (c == '\033') { // mark escape code
+        escaped = 1;
+        return 0;
+    }
+
+    if (escaped>0) escaped++;
+
+    switch (c) {
+        case '\n': {
+            int ret = snprintf(line, sz, "%.*s%.*s\n",(int)arepl->nbuf, arepl->line, (int)arepl->nstack, arepl->line + arepl->sz - arepl->nstack);
+            arepl->nbuf = 0;
+            arepl->nstack = 0;
+            return ret;
+        }
+
+        case '\010':  // C-h
+        case '\177':  // Backspace
+            if (arepl->nbuf > 0) arepl->nbuf--;
+            break;
+        case '\025': // C-u
+            arepl->nbuf = 0;
+            break;
+        case '\013': // C-k Vertical Tab
+            arepl->nstack = 0;
+            break;
+        case '\001': // C-a
+            while (arepl->nbuf > 0) _AREPL_CURSOR_LEFT();
+            break;
+        case '\005': // C-e
+            while (arepl->nstack > 0) _AREPL_CURSOR_RIGHT();
+            break;
+        case '\002': // C-b
+            if (arepl->nbuf > 0) _AREPL_CURSOR_LEFT();
+            break;
+        case '\006': // C-f
+            if (arepl->nstack > 0) _AREPL_CURSOR_RIGHT();
+            break;
+        case '\027': // C-w: backward delete a word
+            while (arepl->nbuf>0 && arepl->line[arepl->nbuf-1] == ' ') arepl->nbuf--;
+            while (arepl->nbuf>0 && arepl->line[arepl->nbuf-1] != ' ') arepl->nbuf--;
+            break;
+
+        case 'D':
+        case 'C':
+            if (escaped == 3 && arepl->nbuf >= 1 && arepl->line[arepl->nbuf-1] == '[') { // arrow keys
+                arepl->nbuf--;
+                if (c == 'D' && arepl->nbuf > 0) _AREPL_CURSOR_LEFT(); // left arrow: \033[D
+                if (c == 'C' && arepl->nstack > 0) _AREPL_CURSOR_RIGHT(); // right arrow: \033[C
+                break;
+            }
+            // fall through to default case
+        default:
+            arepl->line[arepl->nbuf++] = c;
+    }
+    return 0;
+}
 
 /*******************************************************************************
  *
@@ -318,12 +476,11 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
     if (GEN_INDEX(friend_num, TALK_TYPE_FRIEND) == TalkingTo) {
         PRINT("%s", msg);
     } else {
-        INFO("* receive message from %s, autoreplied to remote\n",f->name);
-        char *msg="autoreply";
-         tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)msg, strlen(msg), NULL);
+        INFO("* receive message from %s, use `/go <contact_index>` to talk\n",f->name);
     }
 }
 
+/*
 void friend_name_cb(Tox *tox, uint32_t friend_num, const uint8_t *name, size_t length, void *user_data) {
     struct Friend *f = getfriend(friend_num);
 
@@ -332,9 +489,13 @@ void friend_name_cb(Tox *tox, uint32_t friend_num, const uint8_t *name, size_t l
         sprintf(f->name, "%.*s", (int)length, (char*)name);
         if (GEN_INDEX(friend_num, TALK_TYPE_FRIEND) == TalkingTo) {
             INFO("* Opposite changed name to %.*s", (int)length, (char*)name)
-            //sprintf(async_repl->prompt, FRIEND_TALK_PROMPT, f->name);
+            sprintf(async_repl->prompt, FRIEND_TALK_PROMPT, f->name);
         }
     }
+}
+*/
+
+void friend_name_cb(Tox *tox, uint32_t friend_num, const uint8_t *name, size_t length, void *user_data) {
 }
 
 void friend_status_message_cb(Tox *tox, uint32_t friend_num, const uint8_t *message, size_t length, void *user_data) {
@@ -364,9 +525,16 @@ void friend_request_cb(Tox *tox, const uint8_t *public_key, const uint8_t *messa
     memcpy(req->userdata.friend.pubkey, public_key, TOX_PUBLIC_KEY_SIZE);
     req->msg = malloc(length + 1);
     sprintf(req->msg, "%.*s", (int)length, (char*)message);
-
     req->next = requests;
     requests = req;
+    
+    char buffer[1024];
+    snprintf(buffer, sizeof(buffer), "%s\n",(char*)message);
+    writetologfile(buffer);
+    
+   if (strcmp((char*)message, "connect_to_autotox") == 0){
+	   INFO("giong nhau");
+   }
 }
 
 void self_connection_status_cb(Tox *tox, TOX_CONNECTION connection_status, void *user_data)
@@ -529,13 +697,20 @@ void update_savedata_file(void)
     free(savedata);
 }
 
-
+void bootstrap(void)
+{
+    for (size_t i = 0; i < sizeof(bootstrap_nodes)/sizeof(struct DHT_node); i ++) {
+        uint8_t *bin = hex2bin(bootstrap_nodes[i].key_hex);
+        tox_bootstrap(tox, bootstrap_nodes[i].ip, bootstrap_nodes[i].port, bin, NULL);
+        free(bin);
+    }
+}
 
 void setup_tox(void)
 {
     create_tox();
     init_friends();
-
+    //bootstrap();
 
     ////// register callbacks
 
@@ -575,7 +750,7 @@ void command_guide(int narg, char **args) {
 
     PRINT("Use `/setname <YOUR NAME>` to set your name");
     PRINT("Use `/info` to see your Name, Tox Id and Network Connection.");
-    PRINT("Use `/contacts` to list friends and groups, and use `/go <TARGET>` to talk to one of them.");
+    PRINT("Use `/contacts` to list friends, and use `/go <TARGET>` to talk to one of them.");
     PRINT("Finally, use `/help` to get a list of available commands.\n");
 
     PRINT("HAVE FUN!\n")
@@ -618,40 +793,13 @@ void command_info(int narg, char **args) {
             }
             break;
         }
-       
+        
     }
 FAIL:
     WARN("^ Invalid contact index");
 }
 
-void command_setname(int narg, char **args) {
-    char *name = args[0];
-    size_t len = strlen(name);
-    TOX_ERR_SET_INFO err;
-    tox_self_set_name(tox, (uint8_t*)name, strlen(name), &err);
 
-    if (err != TOX_ERR_SET_INFO_OK) {
-        ERROR("! set name failed, errcode:%d", err);
-        return;
-    }
-
-    self.name = realloc(self.name, len + 1);
-    strcpy(self.name, name);
-}
-
-void command_setstmsg(int narg, char **args) {
-    char *status = args[0];
-    size_t len = strlen(status);
-    TOX_ERR_SET_INFO err;
-    tox_self_set_status_message(tox, (uint8_t*)status, strlen(status), &err);
-    if (err != TOX_ERR_SET_INFO_OK) {
-        ERROR("! set status message failed, errcode:%d", err);
-        return;
-    }
-
-    self.status_message = realloc(self.status_message, len+1);
-    strcpy(self.status_message, status);
-}
 
 void command_add(int narg, char **args) {
     char *hex_id = args[0];
@@ -682,7 +830,24 @@ void command_del(int narg, char **args) {
                 return;
             }
             break;
-        
+       
+    }
+FAIL:
+    WARN("^ Invalid contact index");
+}
+
+void auto_del(char *args) {
+    uint32_t contact_idx;
+    if (!str2uint(args, &contact_idx)) goto FAIL;
+    uint32_t num = INDEX_TO_NUM(contact_idx);
+    switch (INDEX_TO_TYPE(contact_idx)) {
+        case TALK_TYPE_FRIEND:
+            if (delfriend(num)) {
+                tox_friend_delete(tox, num, NULL);
+                return;
+            }
+            break;
+       
     }
 FAIL:
     WARN("^ Invalid contact index");
@@ -695,13 +860,42 @@ void command_contacts(int narg, char **args) {
         PRINT("%3d  %15.15s  %12.12s  %s",GEN_INDEX(f->friend_num, TALK_TYPE_FRIEND), f->name, connection_enum2text(f->connection), f->status_message);
     }
 
+    
 }
 
 void command_save(int narg, char **args) {
     update_savedata_file();
 }
 
+/*
+void command_go(int narg, char **args) {
+    if (narg == 0) {
+        TalkingTo = TALK_TYPE_NULL;
+        strcpy(async_repl->prompt, CMD_PROMPT);
+        return;
+    }
+    uint32_t contact_idx;
+    if (!str2uint(args[0], &contact_idx)) goto FAIL;
+    uint32_t num = INDEX_TO_NUM(contact_idx);
+    switch (INDEX_TO_TYPE(contact_idx)) {
+        case TALK_TYPE_FRIEND: {
+            struct Friend *f = getfriend(num);
+            if (f) {
+                TalkingTo = contact_idx;
+                sprintf(async_repl->prompt, FRIEND_TALK_PROMPT, f->name);
+                return;
+            }
+            break;
+        }
+        
+    }
 
+FAIL:
+    WARN("^ Invalid contact index");
+}
+*/
+
+void command_go(int narg, char **args) {}
 
 void cmd_savefile(Tox *m, struct Friend *f, int argc, char **argv);
 void command_savefile(int narg, char **args) {
@@ -723,12 +917,11 @@ FAIL:
 }
 
 
-
 void _command_accept(int narg, char **args, bool is_accept) {
     if (narg == 0) {
         struct Request * req = requests;
         for (;req != NULL;req=req->next) {
-            PRINT("%-9u%-12s%s", req->id, (req->is_friend_request ? "FRIEND" : "GROUP"), req->msg);
+            PRINT("%-9u%-12s%s", req->id, (req->is_friend_request ? "FRIEND" : "NOT SUPPORTED"), req->msg);
         }
         return;
     }
@@ -749,7 +942,7 @@ void _command_accept(int narg, char **args, bool is_accept) {
                 } else {
                     addfriend(friend_num);
                 }
-            } 
+            }
         }
         free(req->msg);
         free(req);
@@ -766,8 +959,6 @@ void command_accept(int narg, char **args) {
 void command_deny(int narg, char **args) {
     _command_accept(narg, args, false);
 }
-
-
 
 
 
@@ -800,18 +991,6 @@ struct Command commands[] = {
         command_info,
     },
     {
-        "setname",
-        "<name> - set your name",
-        1,
-        command_setname,
-    },
-    {
-        "setstmsg",
-        "<status_message> - set your status message.",
-        1,
-        command_setstmsg,
-    },
-    {
         "add",
         "<toxid> <msg> - add friend",
         2,
@@ -825,9 +1004,15 @@ struct Command commands[] = {
     },
     {
         "contacts",
-        "- list your contacts(friends and groups).",
+        "- list your contacts(friends).",
         0,
         command_contacts,
+    },
+    {
+        "go",
+        "[<contact_index>] - goto talk to a contact, or goto cmd mode if <contact_index> is empty.",
+        0 + COMMAND_ARGS_REST,
+        command_go,
     },
     {
         "savefile",
@@ -837,18 +1022,17 @@ struct Command commands[] = {
     },
     {
         "accept",
-        "[<request_index>] - accept or list(if no <request_index> was provided) friend/group requests.",
+        "[<request_index>] - accept or list(if no <request_index> was provided) friend requests.",
         0 + COMMAND_ARGS_REST,
         command_accept,
     },
     {
         "deny",
-        "[<request_index>] - deny or list(if no <request_index> was provided) friend/group requests.",
+        "[<request_index>] - deny or list(if no <request_index> was provided) friend requests.",
         0 + COMMAND_ARGS_REST,
         command_deny,
     },
-
-
+    
 };
 
 void command_help(int narg, char **args){
@@ -918,6 +1102,7 @@ void onFileRecv(Tox *m, uint32_t friendnum, uint32_t filenumber, uint64_t file_s
     tox_file_get_file_id(m, friendnum, filenumber, ft->file_id, NULL);
 
     free(file_path);
+    
     
 }
 
@@ -1044,6 +1229,78 @@ char *poptok(char **strp) {
 }
 
 
+void repl_iterate(void){
+    static char buf[128];
+    static char line[LINE_MAX_SIZE];
+    while (1) {
+        int n = read(NEW_STDIN_FILENO, buf, sizeof(buf));
+        if (n <= 0) {
+            break;
+        }
+        for (int i=0;i<n;i++) { // for_1
+            char c = buf[i];
+            if (c == '\004')          // C-d 
+                exit(0);
+            if (!arepl_readline(async_repl, c, line, sizeof(line))) continue; // continue to for_1
+
+            int len = strlen(line);
+            line[--len] = '\0'; // remove trailing \n
+
+            if (TalkingTo != TALK_TYPE_NULL && line[0] != '/') {  // if talking to someone, just print the msg out.
+                struct ChatHist **hp = get_current_histp();
+                if (!hp) {
+                    ERROR("! You are not talking to someone. use `/go` to return to cmd mode");
+                    continue; // continue to for_1
+                }
+                char *msg = genmsg(hp, SELF_MSG_PREFIX "%.*s", getftime(), self.name, len, line);
+                PRINT("%s", msg);
+                switch (INDEX_TO_TYPE(TalkingTo)) {
+                    case TALK_TYPE_FRIEND:
+                        tox_friend_send_message(tox, INDEX_TO_NUM(TalkingTo), TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)line, strlen(line), NULL);
+                        continue; // continue to for_1
+                    
+                }
+            }
+
+            PRINT(CMD_MSG_PREFIX "%s", line);  // take this input line as a command.
+            if (len == 0) continue; // continue to for_1.  ignore empty line
+
+            if (line[0] == '/') {
+                char *l = line + 1; // skip leading '/'
+                char *cmdname = poptok(&l);
+                struct Command *cmd = NULL;
+                for (int j=0; j<COMMAND_LENGTH;j++){ // for_2
+                    if (strcmp(commands[j].name, cmdname) == 0) {
+                        cmd = &commands[j];
+                        break; // break for_2
+                    }
+                }
+                if (cmd) {
+                    char *tokens[cmd->narg];
+                    int ntok = 0;
+                    for (; l != NULL && ntok != cmd->narg; ntok++) {
+                        // if it's the last arg, then take the rest line.
+                        char *tok = (ntok == cmd->narg - 1) ? l : poptok(&l);
+                        tokens[ntok] = tok;
+                    }
+                    if (ntok < cmd->narg - (cmd->narg >= COMMAND_ARGS_REST ? COMMAND_ARGS_REST : 0)) {
+                        WARN("Wrong number of cmd args");
+                    } else {
+                        cmd->handler(ntok, tokens);
+                        if (SAVEDATA_AFTER_COMMAND) update_savedata_file();
+                    }
+                    continue; // continue to for_1
+                }
+            }
+
+            WARN("! Invalid command, use `/help` to get list of available commands.");
+        } // end for_1
+    } // end while
+    arepl_reprint(async_repl);
+}
+
+
+
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
         fputs("Usage: autotox\n", stdout);
@@ -1052,9 +1309,14 @@ int main(int argc, char **argv) {
         return 0;
     }
 
- 
+    fputs("Type `/guide` to print the guide.\n", stdout);
+    fputs("Type `/help` to print command list.\n\n",stdout);
+
+    //setup_arepl();
     setup_tox();
-    delfriend(0);
+    //auto_del("0");
+            
+            
     firstlog();
     uint8_t tox_id_bin[TOX_ADDRESS_SIZE];
 	tox_self_get_address(tox, tox_id_bin);
@@ -1063,6 +1325,35 @@ int main(int argc, char **argv) {
 	hex=bin2hex(tox_id_bin, sizeof(tox_id_bin));
     writetologfile(hex);
     
+    //change name
+    hex="autotox";
+    size_t len = strlen(hex);
+    TOX_ERR_SET_INFO err;
+    tox_self_set_name(tox, (uint8_t*)hex, strlen(hex), &err);
+
+    if (err != TOX_ERR_SET_INFO_OK) {
+        writetologfile("! set name failed, errcode");
+    }
+    else{
+		writetologfile(hex);
+		self.name = realloc(self.name, len + 1);
+		strcpy(self.name, hex);
+	}
+	
+	//change statusmsg
+	hex="autobot";
+	len = strlen(hex);
+    tox_self_set_status_message(tox, (uint8_t*)hex, strlen(hex), &err);
+    if (err != TOX_ERR_SET_INFO_OK) {
+        writetologfile("! set status message failed, errcode");
+    }
+    else{
+		writetologfile(hex);
+		self.status_message = realloc(self.status_message, len+1);
+        strcpy(self.status_message, hex);
+	}
+
+    //log contacts
     hex="#Friends(conctact_index|name|connection|status message):\n";
     writetologfile(hex);
     char buffer[1024];
@@ -1077,10 +1368,13 @@ int main(int argc, char **argv) {
 
     uint32_t msecs = 0;
     while (1) {
-
+        if (msecs >= AREPL_INTERVAL) {
+            msecs = 0;
+            //repl_iterate();
+        }
         tox_iterate(tox, NULL);
         uint32_t v = tox_iteration_interval(tox);
-
+        msecs += v;
 
         struct timespec pause;
         pause.tv_sec = 0;
