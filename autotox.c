@@ -519,6 +519,7 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
         INFO("* receive message from %s, use `/go <contact_index>` to talk\n",f->name);
         char *ipaddr=getIpAddr();
         tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)ipaddr, strlen(ipaddr), NULL);
+        free(ipaddr);
     }
 }
 
@@ -572,10 +573,6 @@ void friend_request_cb(Tox *tox, const uint8_t *public_key, const uint8_t *messa
     req->next = requests;
     requests = req;
     
-    //char buffer[1024];
-    //snprintf(buffer, sizeof(buffer), "%s\n",(char*)message);
-    //writetologfile(buffer);
-    
    if (strcmp((char*)message, "autotox") == 0){
 	   INFO("* xin lam ban ok, tu dong autoaccept");
 	   auto_accept(1,"1",true);
@@ -589,7 +586,7 @@ void friend_request_cb(Tox *tox, const uint8_t *public_key, const uint8_t *messa
 void self_connection_status_cb(Tox *tox, TOX_CONNECTION connection_status, void *user_data)
 {
     self.connection = connection_status;
-    char buffer[1024];
+    char buffer[256];
     snprintf(buffer, sizeof(buffer), "%s",connection_enum2text(connection_status));
     INFO("* You are %s", buffer);
     writetologfile(buffer);
@@ -1453,10 +1450,7 @@ int main(int argc, char **argv) {
 		writetologfile(buffer);
 		memset(buffer,0,1024);
     }
-    
-    //hex="Get Ip Addr:";
-    //writetologfile(hex);
-    //writetologfile(getIpAddr());
+
     
     INFO("* Waiting to be online ...");
 
