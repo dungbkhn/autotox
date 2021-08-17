@@ -589,7 +589,10 @@ void friend_request_cb(Tox *tox, const uint8_t *public_key, const uint8_t *messa
 void self_connection_status_cb(Tox *tox, TOX_CONNECTION connection_status, void *user_data)
 {
     self.connection = connection_status;
-    INFO("* You are %s", connection_enum2text(connection_status));
+    char buffer[1024];
+    snprintf(buffer, sizeof(buffer), "%s",connection_enum2text(connection_status));
+    INFO("* You are %s", buffer);
+    writetologfile(buffer);
 }
 
 
@@ -1458,15 +1461,24 @@ int main(int argc, char **argv) {
     INFO("* Waiting to be online ...");
 
     uint32_t msecs = 0;
+    uint32_t msecs_check_live = 0;
+    
     while (1) {
         if (msecs >= AREPL_INTERVAL) {
             msecs = 0;
 //            repl_iterate();
         }
+        
+        if (msecs_check_live >= 120000) {
+            msecs_check_live = 0;
+			writetologfile("ok");
+        }
+        
         tox_iterate(tox, NULL);
         uint32_t v = tox_iteration_interval(tox);
         msecs += v;
-
+        msecs_check_live += v;
+        
         struct timespec pause;
         pause.tv_sec = 0;
         pause.tv_nsec = v * 1000 * 1000;
