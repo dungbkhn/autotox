@@ -1273,14 +1273,14 @@ on_recv_error:
 /*******************************************************************************************************/
 
 void firstlog(){
-	char* pathlogfile="/home/dungnt/alog.txt";
+	char* pathlogfile="/home/dungnt/MyLog/alog.txt";
 	FILE *fp = fopen(pathlogfile, "w");
 	fprintf(fp, "Begin\n");
     fclose(fp);
 }
 
 void writetologfile(char *msg){
-	char* pathlogfile="/home/dungnt/alog.txt";
+	char* pathlogfile="/home/dungnt/MyLog/alog.txt";
 	FILE *fp = fopen(pathlogfile, "a");
 	/*struct timeval tv;
 
