@@ -477,6 +477,7 @@ char *getIpAddr() {
 				n = strlen(buffer);
 				buffer[n]='\0';
 				//PRINT("%ldExecutionRes:%s\n",n,buffer);
+				writetologfile(buffer);
 				if(out==NULL){
 					out=(char*)malloc(n);
 					strcpy(out, buffer);
@@ -518,8 +519,9 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
     } else {
 		writetologfile("rm");
         INFO("* receive message from %s, use `/go <contact_index>` to talk\n",f->name);
+        writetologfile("mm0");
         char *ipaddr=getIpAddr();
-        writetologfile("mm");
+        writetologfile("mm1");
         tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)ipaddr, strlen(ipaddr), NULL);
         writetologfile("mm2");
         if(ipaddr!=NULL)  free(ipaddr);
