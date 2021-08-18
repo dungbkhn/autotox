@@ -14,6 +14,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 
 #include <tox/tox.h>
 #include "autotox_file_transfers.h"
@@ -234,6 +235,55 @@ static bool valid_file_name(const char *filename, size_t length)
     }
 
     return true;
+}
+
+/* gets base file name from path or original file name if no path is supplied.
+ * Returns the file name length
+ */
+size_t get_file_name(char *namebuf, size_t bufsize, const char *pathname)
+{
+    int len = strlen(pathname) - 1;
+    char *path = strdup(pathname);
+
+    //if (path == NULL) {
+    //    exit_toxic_err("failed in get_file_name", FATALERR_MEMORY);
+    //}
+
+    while (len >= 0 && pathname[len] == '/') {
+        path[len--] = '\0';
+    }
+
+    char *finalname = strdup(path);
+
+    //if (finalname == NULL) {
+    //    exit_toxic_err("failed in get_file_name", FATALERR_MEMORY);
+    //}
+
+    const char *basenm = strrchr(path, '/');
+
+    if (basenm != NULL) {
+        if (basenm[1]) {
+            strcpy(finalname, &basenm[1]);
+        }
+    }
+
+    snprintf(namebuf, bufsize, "%s", finalname);
+    free(finalname);
+    free(path);
+
+    return strlen(namebuf);
+}
+
+/* returns file size. If file doesn't exist returns 0. */
+off_t file_size(const char *path)
+{
+    struct stat st;
+
+    if (stat(path, &st) == -1) {
+        return 0;
+    }
+
+    return st.st_size;
 }
 
 struct Friend *getfriend(uint32_t friend_num) {
@@ -522,12 +572,42 @@ char *listDir() {
 	return out;
 }
 
+char *listDirWPath() {
+	char cmd[256]="ls /var/res/share/autotox/";
+	FILE * stream;
+	char buffer[256];
+	size_t n,m=0;
+	char *out=(char*)malloc(2048);
+	memcpy(out,"/var/res/share/autotox/",23);
+	m=23;
+	
+	stream = popen(cmd, "r");
+	if (stream) {
+		while (!feof(stream)){
+			if (fgets(buffer, 256, stream) != NULL){
+				//PRINT("ExecutionRes:%s %d",buffer,(unsigned)strlen(buffer));
+				n = strlen(buffer);
+				//PRINT("%ldExecutionRes:%s\n",n,buffer);
+				//writetologfile(buffer);
+				memcpy(out+m,buffer,n);
+				m+=n;
+			}
+		}
+		pclose(stream);
+	}
+
+	out[m-1]='\0';
+	
+	return out;
+}
 
 /*******************************************************************************
  *
  * Tox Callbacks
  *
  ******************************************************************************/
+ 
+void startsendfile(Tox *m, uint32_t friendnum, char *pathtofile);
 
 void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, const uint8_t *message,
                                    size_t length, void *user_data)
@@ -551,12 +631,13 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
 			free(dircon);
 			writetologfile("em2");
 		}else if(strcmp((char*)message,"down")==0){
-			writetologfile("rm2");
-			char *dircon=listDir();
-			writetologfile("mm0");
-			tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)dircon, strlen(dircon), NULL);
+			writetologfile("rm3");
+			char *dircon=listDirWPath();
+			writetologfile(dircon);
+			PRINT("%s", dircon);
+			startsendfile(tox,friend_num,dircon);
 			free(dircon);
-			writetologfile("em2");
+			writetologfile("em3");
 		} else{
 			writetologfile("rm1");
 			INFO("* receive message from %s, use `/go <contact_index>` to talk\n",f->name);
@@ -648,7 +729,7 @@ void self_connection_status_cb(Tox *tox, TOX_CONNECTION connection_status, void 
 }
 
 
-
+/*
 void onFileRecv(Tox *m, uint32_t friendnum, uint32_t filenumber, uint64_t file_size,
                             const char *filename, size_t name_length);
                             
@@ -711,6 +792,14 @@ void on_file_recv_chunk_cb(Tox *m, uint32_t friendnumber, uint32_t filenumber, u
     
     onFileRecvChunk(m, friendnumber, filenumber, position, (char *) data, length);
 }
+*/
+
+void on_file_recv_control_cb(Tox *m, uint32_t friendnumber, uint32_t filenumber, Tox_File_Control control,
+                          void *userdata);
+                          
+void on_file_chunk_request_cb(Tox *m, uint32_t friendnumber, uint32_t filenumber, uint64_t position,
+                           size_t length, void *userdata);
+                           
 
 /*******************************************************************************
  *
@@ -829,10 +918,10 @@ void setup_tox(void)
     tox_callback_friend_connection_status(tox, friend_connection_status_cb);
 
     //savefile
-    tox_callback_file_recv(tox, on_file_recv_cb);
-    //tox_callback_file_chunk_request(tox, on_file_chunk_request);
-    //tox_callback_file_recv_control(tox, on_file_recv_control);
-    tox_callback_file_recv_chunk(tox, on_file_recv_chunk_cb);
+    //tox_callback_file_recv(tox, on_file_recv_cb);
+    tox_callback_file_chunk_request(tox, on_file_chunk_request_cb);
+    tox_callback_file_recv_control(tox, on_file_recv_control_cb);
+    //tox_callback_file_recv_chunk(tox, on_file_recv_chunk_cb);
 }
 
 /*******************************************************************************
@@ -1001,7 +1090,9 @@ FAIL:
 
 void command_go(int narg, char **args) {}
 
+/*
 void cmd_savefile(Tox *m, struct Friend *f, int argc, char **argv);
+
 void command_savefile(int narg, char **args) {
     PRINT("Da go savefile");
     if (narg == 0) {
@@ -1018,6 +1109,10 @@ void command_savefile(int narg, char **args) {
 FAIL:
     WARN("^ Invalid file index");
         
+}
+*/
+
+void command_savefile(int narg, char **args) {
 }
 
 void auto_accept(int narg, char *args, bool is_accept) {
@@ -1186,10 +1281,240 @@ void command_help(int narg, char **args){
 
 /*******************************************************************************
  *
- * SaveFile
+ * ControlFile
  *
  ******************************************************************************/
  
+ static void onFileControl(Tox *m, uint32_t friendnum, uint32_t filenumber,
+                               Tox_File_Control control)
+{
+
+    writetologfile("onFileControl");
+    
+    struct Friend *f = getfriend(friendnum); 
+    
+    struct FileTransfer *ft = get_file_transfer_struct(f, filenumber);
+
+
+    switch (control) {
+        case TOX_FILE_CONTROL_RESUME: {
+            /* transfer is accepted */
+            if (ft->state == FILE_TRANSFER_PENDING) {
+                ft->state = FILE_TRANSFER_STARTED;
+                /*line_info_add(self, false, NULL, NULL, SYS_MSG, 0, 0, "File transfer [%zu] for '%s' accepted.",
+                              ft->index, ft->file_name);
+                char progline[MAX_STR_SIZE];
+                init_progress_bar(progline);
+                line_info_add(self, false, NULL, NULL, SYS_MSG, 0, 0, "%s", progline);
+                sound_notify(self, silent, NT_NOFOCUS | user_settings->bell_on_filetrans_accept | NT_WNDALERT_2, NULL);
+                ft->line_id = self->chatwin->hst->line_end->id + 2;*/
+            } else if (ft->state == FILE_TRANSFER_PAUSED) {    // transfer is resumed
+                ft->state = FILE_TRANSFER_STARTED;
+            }
+
+            break;
+        }
+
+        case TOX_FILE_CONTROL_PAUSE: {
+            ft->state = FILE_TRANSFER_PAUSED;
+            break;
+        }
+
+        case TOX_FILE_CONTROL_CANCEL: {
+            char msg[MAX_STR_SIZE];
+            snprintf(msg, sizeof(msg), "File transfer for '%s' was aborted.", ft->file_name);
+            close_file_transfer( m, ft, -1, msg);
+            break;
+        }
+    }
+}
+
+ void on_file_recv_control_cb(Tox *m, uint32_t friendnumber, uint32_t filenumber, Tox_File_Control control,
+                          void *userdata){
+		  onFileControl(m, friendnumber, filenumber, control);
+}
+ 
+/*******************************************************************************
+ *
+ * SendFile
+ *
+ ******************************************************************************/
+ 
+
+
+void startsendfile(Tox *m, uint32_t friendnum, char *pathtofile) //tuong dong cmd_sendfile o toxic
+{
+
+    const char *errmsg = NULL;
+    struct Friend *f = getfriend(friendnum); 
+
+    char path[MAX_STR_SIZE];
+    snprintf(path, sizeof(path), "%s", pathtofile);
+    int path_len = strlen(path);
+
+    if (path_len >= MAX_STR_SIZE) {
+        writetologfile("File path exceeds character limit.");
+        return;
+    }
+
+    FILE *file_to_send = fopen(path, "r");
+
+    if (file_to_send == NULL) {
+        writetologfile("File not found.");
+        return;
+    }
+
+    off_t filesize = file_size(path);
+   
+    if (filesize == 0) {
+        writetologfile("Invalid file.");
+        fclose(file_to_send);
+        return;
+    }
+
+    char file_name[TOX_MAX_FILENAME_LENGTH];
+    size_t namelen = get_file_name(file_name, sizeof(file_name), path);
+
+    Tox_Err_File_Send err;
+    PRINT(" %d %lu %s %ld ", friendnum,filesize,file_name,namelen);
+    uint32_t filenum = tox_file_send(m, friendnum, TOX_FILE_KIND_DATA, (uint64_t) filesize, NULL, (uint8_t *) file_name, namelen, &err);
+
+    if (err != TOX_ERR_FILE_SEND_OK) {
+        goto on_send_error;
+    }
+
+    struct FileTransfer *ft = new_file_transfer(f,friendnum, filenum, FILE_TRANSFER_SEND, TOX_FILE_KIND_DATA);
+
+    if (!ft) {
+        err = TOX_ERR_FILE_SEND_TOO_MANY;
+        goto on_send_error;
+    }
+    
+    PRINT(" %u %s ", filenum,(char *)ft->file_id);
+    memcpy(ft->file_name, file_name, namelen + 1);
+    ft->file = file_to_send;
+    ft->file_size = filesize;
+    tox_file_get_file_id(m, friendnum, filenum, ft->file_id, NULL);
+
+    PRINT("Sending file [%d]: '%s' ", filenum, file_name);
+    writetologfile("Sending file");
+    writetologfile(file_name);
+    
+    return;
+
+on_send_error:
+
+    switch (err) {
+        case TOX_ERR_FILE_SEND_FRIEND_NOT_FOUND:
+            errmsg = "File transfer failed: Invalid friend.";
+            break;
+
+        case TOX_ERR_FILE_SEND_FRIEND_NOT_CONNECTED:
+            errmsg = "File transfer failed: Friend is offline.";
+            break;
+
+        case TOX_ERR_FILE_SEND_NAME_TOO_LONG:
+            errmsg = "File transfer failed: Filename is too long.";
+            break;
+
+        case TOX_ERR_FILE_SEND_TOO_MANY:
+            errmsg = "File transfer failed: Too many concurrent file transfers.";
+            break;
+
+        default:
+            errmsg = "File transfer failed.";
+            break;
+    }
+
+    writetologfile((char*)errmsg);
+    tox_file_control(m, friendnum, filenum, TOX_FILE_CONTROL_CANCEL, NULL);
+    fclose(file_to_send);
+}
+
+static void onFileChunkRequest(Tox *m, uint32_t friendnum, uint32_t filenumber, uint64_t position, size_t length)
+{   
+    struct Friend *f = getfriend(friendnum); 
+    
+    struct FileTransfer *ft = get_file_transfer_struct(f, filenumber);
+
+    if (!ft) {
+        return;
+    }
+
+    if (ft->state != FILE_TRANSFER_STARTED) {
+        return;
+    }
+
+    char msg[MAX_STR_SIZE];
+
+    if (length == 0) {
+        snprintf(msg, sizeof(msg), "File '%s' successfully sent.", ft->file_name);
+        close_file_transfer(m, ft, -1, msg);
+        return;
+    }
+
+    if (ft->file == NULL) {
+        snprintf(msg, sizeof(msg), "File transfer for '%s' failed: Null file pointer.", ft->file_name);
+        close_file_transfer(m, ft, TOX_FILE_CONTROL_CANCEL, msg);
+        return;
+    }
+
+    if (ft->position != position) {
+        if (fseek(ft->file, position, SEEK_SET) == -1) {
+            snprintf(msg, sizeof(msg), "File transfer for '%s' failed: Seek fail.", ft->file_name);
+            close_file_transfer(m, ft, TOX_FILE_CONTROL_CANCEL, msg);
+            return;
+        }
+
+        ft->position = position;
+    }
+
+    uint8_t *send_data = malloc(length);
+
+    if (send_data == NULL) {
+        snprintf(msg, sizeof(msg), "File transfer for '%s' failed: Out of memory.", ft->file_name);
+        close_file_transfer(m, ft, TOX_FILE_CONTROL_CANCEL, msg);
+        return;
+    }
+
+    size_t send_length = fread(send_data, 1, length, ft->file);
+
+    if (send_length != length) {
+        snprintf(msg, sizeof(msg), "File transfer for '%s' failed: Read fail.", ft->file_name);
+        close_file_transfer(m, ft, TOX_FILE_CONTROL_CANCEL, msg);
+        free(send_data);
+        return;
+    }
+
+    Tox_Err_File_Send_Chunk err;
+    tox_file_send_chunk(m, ft->friendnumber, ft->filenumber, position, send_data, send_length, &err);
+
+    free(send_data);
+
+    if (err != TOX_ERR_FILE_SEND_CHUNK_OK) {
+        fprintf(stderr, "tox_file_send_chunk failed in chat callback (error %d)\n", err);
+    }
+
+    ft->position += send_length;
+    ft->bps += send_length;
+}
+
+void on_file_chunk_request_cb(Tox *m, uint32_t friendnumber, uint32_t filenumber, uint64_t position,
+                           size_t length, void *userdata)
+{
+    //UNUSED_VAR(userdata);
+
+    PRINT("Sending InfoFile : %d %d %ld %ld",friendnumber,filenumber,position,length);
+    
+    onFileChunkRequest(m, friendnumber, filenumber, position, length);
+}
+
+/*******************************************************************************
+ *
+ * SaveFile
+ *
+ ******************************************************************************/
+ /*
 void onFileRecv(Tox *m, uint32_t friendnum, uint32_t filenumber, uint64_t file_size, const char *filename, size_t name_length)
 {
     struct Friend *f = getfriend(friendnum); 
@@ -1323,7 +1648,7 @@ on_recv_error:
             return;
     }
 }
-
+*/
 
 /*******************************************************************************************************
 /                                         LOGS

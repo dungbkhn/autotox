@@ -25,7 +25,12 @@ static void clear_file_transfer(struct FileTransfer *ft)
 struct FileTransfer *get_file_transfer_struct(struct Friend *f, uint32_t filenumber)
 {
     for (size_t i = 0; i < MAX_FILES; ++i) {
+	 struct FileTransfer *ft_send = &f->file_sender[i];
 
+        if (ft_send->state != FILE_TRANSFER_INACTIVE && ft_send->filenumber == filenumber) {
+            return ft_send;
+        }
+        
         struct FileTransfer *ft_recv = &f->file_receiver[i];
 
         if (ft_recv->state != FILE_TRANSFER_INACTIVE && ft_recv->filenumber == filenumber) {
@@ -57,6 +62,8 @@ struct FileTransfer *get_file_transfer_struct_index(struct Friend *f, uint32_t i
     return NULL;
 }
 
+
+
 /* Returns a pointer to an unused file receiver.
  * Returns NULL if all file receivers are in use.
  */
@@ -66,7 +73,7 @@ static struct FileTransfer *new_file_receiver(struct Friend *f, uint32_t friendn
     
     for (size_t i = 0; i < MAX_FILES; ++i) {
         struct FileTransfer *ft = &f->file_receiver[i];
-        PRINT("here %ld",i);
+       
         if (ft->state == FILE_TRANSFER_INACTIVE) {
             clear_file_transfer(ft);
             ft->index = i;
@@ -80,6 +87,30 @@ static struct FileTransfer *new_file_receiver(struct Friend *f, uint32_t friendn
 
     return NULL;
 }
+
+/* Returns a pointer to an unused file sender.
+ * Returns NULL if all file senders are in use.
+ */
+static struct FileTransfer *new_file_sender(struct Friend *f, uint32_t friendnumber, uint32_t filenumber, uint8_t type)
+{
+    for (size_t i = 0; i < MAX_FILES; ++i) {
+        struct FileTransfer *ft = &f->file_sender[i];
+
+        if (ft->state == FILE_TRANSFER_INACTIVE) {
+            clear_file_transfer(ft);
+            //ft->window = window;
+            ft->index = i;
+            ft->friendnumber = friendnumber;
+            ft->filenumber = filenumber;
+            ft->file_type = type;
+            ft->state = FILE_TRANSFER_PENDING;
+            return ft;
+        }
+    }
+
+    return NULL;
+}
+
 /* Initializes an unused file transfer and returns its pointer.
  * Returns NULL on failure.
  */
@@ -90,6 +121,9 @@ struct FileTransfer *new_file_transfer(struct Friend *f, uint32_t friendnumber, 
         return new_file_receiver(f, friendnumber, filenumber, type);
     }
 
+    if (direction == FILE_TRANSFER_SEND) {
+        return new_file_sender(f, friendnumber, filenumber, type);
+    }
 
     return NULL;
 }

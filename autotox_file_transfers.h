@@ -81,6 +81,7 @@ struct Friend {
     
     struct ChatHist *hist;
     struct FileTransfer file_receiver[MAX_FILES];
+    struct FileTransfer file_sender[MAX_FILES];
     struct Friend *next;
 };
 
