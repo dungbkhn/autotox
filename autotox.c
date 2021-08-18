@@ -181,13 +181,13 @@ char* getftime(void) {
 const char * connection_enum2text(TOX_CONNECTION conn) {
     switch (conn) {
         case TOX_CONNECTION_NONE:
-            return "Offline";
+            return "Of";
         case TOX_CONNECTION_TCP:
-            return "Online(TCP)";
+            return "OnT";
         case TOX_CONNECTION_UDP:
-            return "Online(UDP)";
+            return "OnU";
         default:
-            return "UNKNOWN";
+            return "sno";
     }
 }
 
@@ -516,10 +516,14 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
     if (GEN_INDEX(friend_num, TALK_TYPE_FRIEND) == TalkingTo) {
         PRINT("%s", msg);
     } else {
+		writetologfile("rm");
         INFO("* receive message from %s, use `/go <contact_index>` to talk\n",f->name);
         char *ipaddr=getIpAddr();
+        writetologfile("mm");
         tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)ipaddr, strlen(ipaddr), NULL);
-        free(ipaddr);
+        writetologfile("mm2");
+        if(ipaddr!=NULL)  free(ipaddr);
+        writetologfile("em");
     }
 }
 
@@ -554,7 +558,13 @@ void friend_connection_status_cb(Tox *tox, uint32_t friend_num, TOX_CONNECTION c
     struct Friend *f = getfriend(friend_num);
     if (f) {
         f->connection = connection_status;
-        INFO("* %s is %s", f->name, connection_enum2text(connection_status));
+        
+       char buffer[256];
+       snprintf(buffer, sizeof(buffer), "%s",connection_enum2text(connection_status));
+       INFO("* %s is %s", f->name, buffer);
+       writetologfile("f:");
+       writetologfile(f->name);
+       writetologfile(buffer);
     }
 }
 
@@ -589,6 +599,7 @@ void self_connection_status_cb(Tox *tox, TOX_CONNECTION connection_status, void 
     char buffer[256];
     snprintf(buffer, sizeof(buffer), "%s",connection_enum2text(connection_status));
     INFO("* You are %s", buffer);
+    writetologfile("You:");
     writetologfile(buffer);
 }
 
