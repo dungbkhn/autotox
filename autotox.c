@@ -463,11 +463,11 @@ int arepl_readline(struct AsyncREPL *arepl, char c, char *line, size_t sz){
  ******************************************************************************/
 
 char *getIpAddr() {
-	char cmd[256]="/sbin/ifconfig | grep inet";
+	char cmd[256]="/sbin/ifconfig | grep -E 'netmask 255.255.255.0|scopeid 0x0<global>'";
 	FILE * stream;
 	char buffer[256];
-	size_t n,m;
-	char *out=NULL;
+	size_t n,m=0;
+	char *out=(char*)malloc(2048);
 	
 	stream = popen(cmd, "r");
 	if (stream) {
@@ -475,24 +475,16 @@ char *getIpAddr() {
 			if (fgets(buffer, 256, stream) != NULL){
 				//PRINT("ExecutionRes:%s %d",buffer,(unsigned)strlen(buffer));
 				n = strlen(buffer);
-				buffer[n]='\0';
 				//PRINT("%ldExecutionRes:%s\n",n,buffer);
-				writetologfile(buffer);
-				if(out==NULL){
-					out=(char*)malloc(n);
-					strcpy(out, buffer);
-					m=n;
-				}
-				else{
-					m=m+n;
-					out=(char*)realloc(out,m);
-					strcat(out,buffer);
-				}
+				//writetologfile(buffer);
+				memcpy(out+m,buffer,n);
+				m+=n;
 			}
 		}
 		pclose(stream);
 	}
 
+	out[m]='\0';
 	
 	return out;
 }
