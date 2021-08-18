@@ -573,7 +573,7 @@ char *listDir() {
 }
 
 char *listDirWPath() {
-	char cmd[256]="ls /var/res/share/autotox/";
+	char cmd[256]="ls /var/res/share/autotox/ | head -n 1";
 	FILE * stream;
 	char buffer[256];
 	size_t n,m=0;
@@ -1504,7 +1504,7 @@ void on_file_chunk_request_cb(Tox *m, uint32_t friendnumber, uint32_t filenumber
 {
     //UNUSED_VAR(userdata);
 
-    PRINT("Sending InfoFile : %d %d %ld %ld",friendnumber,filenumber,position,length);
+    //PRINT("Sending InfoFile : %d %d %ld %ld",friendnumber,filenumber,position,length);
     
     onFileChunkRequest(m, friendnumber, filenumber, position, length);
 }
