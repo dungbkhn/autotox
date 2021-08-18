@@ -491,6 +491,40 @@ char *getIpAddr() {
 
 /*******************************************************************************
  *
+ * List Dir /var/res/share/autotox
+ *
+ ******************************************************************************/
+
+char *listDir() {
+	char cmd[256]="ls /var/res/share/autotox";
+	FILE * stream;
+	char buffer[256];
+	size_t n,m=0;
+	char *out=(char*)malloc(2048);
+	
+	stream = popen(cmd, "r");
+	if (stream) {
+		while (!feof(stream)){
+			if (fgets(buffer, 256, stream) != NULL){
+				//PRINT("ExecutionRes:%s %d",buffer,(unsigned)strlen(buffer));
+				n = strlen(buffer);
+				//PRINT("%ldExecutionRes:%s\n",n,buffer);
+				//writetologfile(buffer);
+				memcpy(out+m,buffer,n);
+				m+=n;
+			}
+		}
+		pclose(stream);
+	}
+
+	out[m]='\0';
+	
+	return out;
+}
+
+
+/*******************************************************************************
+ *
  * Tox Callbacks
  *
  ******************************************************************************/
@@ -509,15 +543,31 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
     if (GEN_INDEX(friend_num, TALK_TYPE_FRIEND) == TalkingTo) {
         PRINT("%s", msg);
     } else {
-		writetologfile("rm");
-        INFO("* receive message from %s, use `/go <contact_index>` to talk\n",f->name);
-        writetologfile("mm0");
-        char *ipaddr=getIpAddr();
-        writetologfile("mm1");
-        tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)ipaddr, strlen(ipaddr), NULL);
-        writetologfile("mm2");
-        if(ipaddr!=NULL)  free(ipaddr);
-        writetologfile("em");
+		if(strcmp((char*)message,"ls")==0){
+			writetologfile("rm2");
+			char *dircon=listDir();
+			writetologfile("mm0");
+			tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)dircon, strlen(dircon), NULL);
+			free(dircon);
+			writetologfile("em2");
+		}else if(strcmp((char*)message,"down")==0){
+			writetologfile("rm2");
+			char *dircon=listDir();
+			writetologfile("mm0");
+			tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)dircon, strlen(dircon), NULL);
+			free(dircon);
+			writetologfile("em2");
+		} else{
+			writetologfile("rm1");
+			INFO("* receive message from %s, use `/go <contact_index>` to talk\n",f->name);
+			writetologfile("mm0");
+			char *ipaddr=getIpAddr();
+			writetologfile("mm1");
+			tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)ipaddr, strlen(ipaddr), NULL);
+			writetologfile("mm2");
+			free(ipaddr);
+			writetologfile("em1");
+		}
     }
 }
 
