@@ -546,7 +546,7 @@ char *getIpAddr() {
  ******************************************************************************/
 
 char *listDir() {
-	char cmd[256]="ls /var/res/share/autotox | head -n 9";
+	char cmd[256]="ls /var/res/share/autotox | head -n 8";
 	FILE * stream;
 	char buffer[256];
 	size_t n,m=0,i=1;
@@ -624,7 +624,7 @@ char *listDirWPath(int i) {
  *
  ******************************************************************************/
  
-void startsendfile(Tox *m, uint32_t friendnum, char *pathtofile);
+void startsendfile(Tox *m, uint32_t friendnum, char *pathtofile);//need for friend_message_cb
 
 void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, const uint8_t *message,
                                    size_t length, void *user_data)
