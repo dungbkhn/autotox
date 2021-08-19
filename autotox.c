@@ -541,6 +541,7 @@ char *getIpAddr() {
 	return out;
 }
 
+
 /*******************************************************************************
  *
  * List Dir /var/res/share/autotox
@@ -582,7 +583,7 @@ char *listDir() {
 	return out;
 }
 
-char *listDirWPath(int i) {
+char *listDirWPath(int i, bool quotes) {
 	char cmd[256]="ls /var/res/share/autotox/ | head -n ";
 	char t[64]=" | tail -n 1";
 	char c[16];
@@ -597,8 +598,16 @@ char *listDirWPath(int i) {
 	
 	//PRINT("cmd=%s",cmd);
 	char *out=(char*)malloc(2048);
-	memcpy(out,"/var/res/share/autotox/",23);
-	m=23;
+	
+	if(quotes==false){
+		memcpy(out,"/var/res/share/autotox/",23);
+		m=23;
+	}
+	else {
+	   memcpy(out,"/var/res/share/autotox/'",24);
+	   m=24;
+   }
+	
 	
 	stream = popen(cmd, "r");
 	if (stream) {
@@ -615,9 +624,34 @@ char *listDirWPath(int i) {
 		pclose(stream);
 	}
 
-	out[m-1]='\0';
+    if(quotes==false)
+		out[m-1]='\0';
+	else{
+		out[m-1]='\'';
+		out[m]='\0';
+	}
 	
 	return out;
+}
+
+/*******************************************************************************
+ *
+ * Del File
+ *
+ ******************************************************************************/
+
+int delFile(int i) {
+	char *pathfile=listDirWPath(i,true);
+	
+	char cmd[256]="rm ";
+	int l=strlen(pathfile);
+	memcpy(cmd+3,pathfile,l);
+	cmd[3+l]='\0';
+	PRINT("%s",cmd);
+	
+	popen(cmd, "r");
+	
+	free(pathfile);
 }
 
 /*******************************************************************************
@@ -653,6 +687,20 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
 			tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)dircon, strlen(dircon), NULL);
 			free(dircon);
 			//writetologfile("em2");
+		}else if(strcmp(s,"delf")==0){
+			writetologfile("rm4");
+			char c[2];
+		    memcpy(c, (char*)(message+5),1);
+		    c[1]='\0';
+		    PRINT("c=%s", c);
+		    int i = (int)strtol(c, NULL, 10);
+		    PRINT("i=%d", i);
+		    if(i==0) i=1;
+			delFile(i);
+			writetologfile("mm0");
+			char *m="Has run del command at remote";
+			tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)m, strlen(m), NULL);
+			writetologfile("em4");
 		}else if(strcmp(s,"down")==0){
 			//writetologfile("rm3");
 			char c[2];
@@ -662,7 +710,7 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
 		    int i = (int)strtol(c, NULL, 10);
 		    //PRINT("i=%d", i);
 		    if(i==0) i=1;
-			char *dircon=listDirWPath(i);
+			char *dircon=listDirWPath(i,false);
 			//writetologfile(dircon);
 			//PRINT("%s", dircon);
 			startsendfile(tox,friend_num,dircon);
@@ -1560,7 +1608,7 @@ void onFileRecv(Tox *m, uint32_t friendnum, uint32_t filenumber, uint64_t file_s
     }
 
     PRINT("Friend muon gui file la: %s %d", f->name, f->friend_num);
-    PRINT("FileTransfer la: %ld %d %d", ft->index, ft->friendnumber, ft->filenumber);
+    //PRINT("FileTransfer la: %ld %d %d", ft->index, ft->friendnumber, ft->filenumber);
     
     char sizestr[32];
     bytes_convert_str(sizestr, sizeof(sizestr), file_size);
