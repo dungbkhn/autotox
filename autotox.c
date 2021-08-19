@@ -546,12 +546,14 @@ char *getIpAddr() {
  ******************************************************************************/
 
 char *listDir() {
-	char cmd[256]="ls /var/res/share/autotox";
+	char cmd[256]="ls /var/res/share/autotox | head -n 9";
 	FILE * stream;
 	char buffer[256];
-	size_t n,m=0;
+	size_t n,m=0,i=1;
 	char *out=(char*)malloc(2048);
-	
+	char count[64];
+       
+       
 	stream = popen(cmd, "r");
 	if (stream) {
 		while (!feof(stream)){
@@ -560,6 +562,12 @@ char *listDir() {
 				n = strlen(buffer);
 				//PRINT("%ldExecutionRes:%s\n",n,buffer);
 				//writetologfile(buffer);
+				
+				snprintf(count, sizeof(count), " %d ",i);
+				i++;
+				memcpy(out+m,count,3);
+				m+=3;
+				memset(count,0,64);
 				memcpy(out+m,buffer,n);
 				m+=n;
 			}
@@ -572,11 +580,20 @@ char *listDir() {
 	return out;
 }
 
-char *listDirWPath() {
-	char cmd[256]="ls /var/res/share/autotox/ | head -n 1";
+char *listDirWPath(int i) {
+	char cmd[256]="ls /var/res/share/autotox/ | head -n ";
+	char t[64]=" | tail -n 1";
+	char c[16];
 	FILE * stream;
 	char buffer[256];
 	size_t n,m=0;
+
+	if((i<0)||(i>8)) i=1;
+	snprintf(c, sizeof(c), "%d",i);
+	memcpy(cmd+37,c,1);
+	memcpy(cmd+38,t,12);
+	
+	//PRINT("cmd=%s",cmd);
 	char *out=(char*)malloc(2048);
 	memcpy(out,"/var/res/share/autotox/",23);
 	m=23;
@@ -623,31 +640,42 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
     if (GEN_INDEX(friend_num, TALK_TYPE_FRIEND) == TalkingTo) {
         PRINT("%s", msg);
     } else {
-		if(strcmp((char*)message,"ls")==0){
-			writetologfile("rm2");
+		char s[5];
+		memcpy(s, (char*)message,4);
+		s[4]='\0';
+		//PRINT("%s", s);
+		if(strcmp(s,"ls")==0){
+			//writetologfile("rm2");
 			char *dircon=listDir();
-			writetologfile("mm0");
+			//writetologfile("mm0");
 			tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)dircon, strlen(dircon), NULL);
 			free(dircon);
-			writetologfile("em2");
-		}else if(strcmp((char*)message,"down")==0){
-			writetologfile("rm3");
-			char *dircon=listDirWPath();
-			writetologfile(dircon);
-			PRINT("%s", dircon);
+			//writetologfile("em2");
+		}else if(strcmp(s,"down")==0){
+			//writetologfile("rm3");
+			char c[2];
+		    memcpy(c, (char*)(message+5),1);
+		    c[1]='\0';
+		    //PRINT("c=%s", c);
+		    int i = (int)strtol(c, NULL, 10);
+		    //PRINT("i=%d", i);
+		    if(i==0) i=1;
+			char *dircon=listDirWPath(i);
+			//writetologfile(dircon);
+			//PRINT("%s", dircon);
 			startsendfile(tox,friend_num,dircon);
 			free(dircon);
-			writetologfile("em3");
+			//writetologfile("em3");
 		} else{
-			writetologfile("rm1");
+			//writetologfile("rm1");
 			INFO("* receive message from %s, use `/go <contact_index>` to talk\n",f->name);
-			writetologfile("mm0");
+			//writetologfile("mm0");
 			char *ipaddr=getIpAddr();
-			writetologfile("mm1");
+			//writetologfile("mm1");
 			tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)ipaddr, strlen(ipaddr), NULL);
-			writetologfile("mm2");
+			//writetologfile("mm2");
 			free(ipaddr);
-			writetologfile("em1");
+			//writetologfile("em1");
 		}
     }
 }
@@ -1376,7 +1404,7 @@ void startsendfile(Tox *m, uint32_t friendnum, char *pathtofile) //tuong dong cm
     size_t namelen = get_file_name(file_name, sizeof(file_name), path);
 
     Tox_Err_File_Send err;
-    PRINT(" %d %lu %s %ld ", friendnum,filesize,file_name,namelen);
+    //PRINT(" %d %lu %s %ld ", friendnum,filesize,file_name,namelen);
     uint32_t filenum = tox_file_send(m, friendnum, TOX_FILE_KIND_DATA, (uint64_t) filesize, NULL, (uint8_t *) file_name, namelen, &err);
 
     if (err != TOX_ERR_FILE_SEND_OK) {
@@ -1390,13 +1418,13 @@ void startsendfile(Tox *m, uint32_t friendnum, char *pathtofile) //tuong dong cm
         goto on_send_error;
     }
     
-    PRINT(" %u %s ", filenum,(char *)ft->file_id);
+    //PRINT(" %u %s ", filenum,(char *)ft->file_id);
     memcpy(ft->file_name, file_name, namelen + 1);
     ft->file = file_to_send;
     ft->file_size = filesize;
     tox_file_get_file_id(m, friendnum, filenum, ft->file_id, NULL);
 
-    PRINT("Sending file [%d]: '%s' ", filenum, file_name);
+    //PRINT("Sending file [%d]: '%s' ", filenum, file_name);
     writetologfile("Sending file");
     writetologfile(file_name);
     
