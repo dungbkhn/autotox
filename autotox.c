@@ -21,6 +21,19 @@
 
 #define UNUSED_VAR(x) ((void) x)
 
+static const char pathlogfile[]="/home/dungnt/MyLog/alog.txt";
+static char maindir[]="/var/res/share";
+static const char lscmd_prefix[]="/ -all | sed -n ";
+static const char lscmd_suffix[]="p | awk '{$a=\"\";$b=\"\";$c=\"\";$d=\"\";$e=\"\";$f=\"\";$g=\"\"} 1' a=2 b=3 c=4 d=5 e=6 f=7 g=8 | awk '{ sub(/drwxr-xr-x$/, \"dir\", $1) sub(/-rwxr-xr-x$/, \"---\", $1) }1'";
+//static const char lscmd_suffix_wp[]="p | awk '{$a=\"\";$b=\"\";$c=\"\";$d=\"\";$e=\"\";$f=\"\";$g=\"\"} 1' a=2 b=3 c=4 d=5 e=6 f=7 g=8 | awk '{ sub(/drwxr-xr-x$/, \"d\", $1) sub(/-rwxr-xr-x$/, \"f\", $1) }1'";
+static const char lscmd_suffix_wp[]="p";
+static char *curdir;
+static char *relativedir;
+static char *downloaddir;
+static size_t maindirlen=0;
+static int maxelecount=0;
+static int curelecount=0;
+
 /*******************************************************************************
  *
  * Consts & Macros
@@ -139,8 +152,27 @@ enum TALK_TYPE { TALK_TYPE_FRIEND, TALK_TYPE_COUNT, TALK_TYPE_NULL = UINT32_MAX 
 
 uint32_t TalkingTo = TALK_TYPE_NULL;
 
-
 void writetologfile(char *msg);
+
+char *getLastDir(const char *path)
+{
+    char *pend;
+
+    if ((pend = strrchr(path, '/')) != NULL)
+        return pend + 1;
+
+    return NULL;
+}
+
+size_t getPosOfLastDir(const char *path)
+{
+    char *pend;
+
+    if ((pend = strrchr(path, '/')) != NULL)
+        return pend - path;
+
+    return 0;
+}
 
 bool str2uint(char *str, uint32_t *num) {
     char *str_end;
@@ -544,33 +576,48 @@ char *getIpAddr() {
 
 /*******************************************************************************
  *
- * List Dir /var/res/share/autotox
+ * List Dir
  *
  ******************************************************************************/
 
-char *listDir() {
-	char cmd[256]="ls /var/res/share/autotox | head -n 8";
+char *listDir(int k) {
 	FILE * stream;
 	char buffer[256];
-	size_t n,m=0,i=1;
-	char *out=(char*)malloc(2048);
+	size_t n,m=0;
+	int i=k-3;
 	char count[64];
-       
-       
-	stream = popen(cmd, "r");
+	char *out=(char*)malloc(2048);
+	char lsstr[] = "ls ";
+	char lsmaindir[512];
+	char k_str[32];
+	char nextstr[]="-- press next to see more --";
+    snprintf(k_str, sizeof(k_str), "%d,%d",k,k+9);
+		
+    size_t lenlsstr=strlen(lsstr);
+    size_t lencurdir=strlen(curdir);
+    size_t lenlscmd_prefix = strlen(lscmd_prefix);
+    size_t lenlscmd_suffix = strlen(lscmd_suffix);
+    size_t k_strlen = strlen(k_str);
+    
+    memcpy(lsmaindir,lsstr,lenlsstr);
+    memcpy(lsmaindir+lenlsstr,curdir,lencurdir);
+    memcpy(lsmaindir+lenlsstr+lencurdir,lscmd_prefix,lenlscmd_prefix);
+    memcpy(lsmaindir+lenlsstr+lencurdir + lenlscmd_prefix,k_str,k_strlen);
+    memcpy(lsmaindir+lenlsstr+lencurdir + lenlscmd_prefix + k_strlen,lscmd_suffix,lenlscmd_suffix);
+    
+    lsmaindir[lenlsstr+lencurdir+lenlscmd_prefix+k_strlen+lenlscmd_suffix]='\0';
+    //PRINT("%s",lsmaindir);
+    
+	stream = popen(lsmaindir, "r");
 	if (stream) {
 		while (!feof(stream)){
 			if (fgets(buffer, 256, stream) != NULL){
-				//PRINT("ExecutionRes:%s %d",buffer,(unsigned)strlen(buffer));
 				n = strlen(buffer);
-				//PRINT("%ldExecutionRes:%s\n",n,buffer);
-				//writetologfile(buffer);
-				
 				snprintf(count, sizeof(count), " %d ",i);
 				i++;
-				memcpy(out+m,count,3);
-				m+=3;
-				memset(count,0,64);
+				memcpy(out+m,count,strlen(count));
+				m+=strlen(count);
+				memset(count,0,32);
 				memcpy(out+m,buffer,n);
 				m+=n;
 			}
@@ -578,34 +625,87 @@ char *listDir() {
 		pclose(stream);
 	}
 
+    if(k+9 <= maxelecount + 3){
+		memcpy(out+m,nextstr,strlen(nextstr));
+		m+=strlen(nextstr);
+	}
+	
 	out[m]='\0';
 	
 	return out;
 }
 
-char *listDirWPath(int i, bool quotes) {
-	char cmd[256]="ls /var/res/share/autotox/ | head -n ";
-	char t[64]=" | tail -n 1";
+int getDirEleSize() {
+	FILE * stream;
+	char buffer[256];
+	size_t n;
+
+	char lsstr[] = "ls -all ";
+	char wcstr[] = " | wc -l";
+	char lsmaindir[512];
+		
+    size_t lenlsstr=strlen(lsstr);
+    size_t lencurdir=strlen(curdir);
+    size_t lenwcstr = strlen(wcstr);
+
+    
+    memcpy(lsmaindir,lsstr,lenlsstr);
+    memcpy(lsmaindir+lenlsstr,curdir,lencurdir);
+    memcpy(lsmaindir+lenlsstr+lencurdir,wcstr,lenwcstr);
+    
+    lsmaindir[lenlsstr+lencurdir+lenwcstr]='\0';
+    
+	stream = popen(lsmaindir, "r");
+	if (stream) {
+		while (!feof(stream)){
+			if (fgets(buffer, 256, stream) != NULL){
+				n = (int)strtol(buffer,NULL,10);
+			}
+		}
+		pclose(stream);
+	}
+
+    
+	return n;
+}
+
+char *getFileWPath(int i, bool quotes) {
+	char cmd[512]="ls -all ";
+	char t[64]="/ | sed -n ";
 	char c[16];
 	FILE * stream;
 	char buffer[256];
-	size_t n,m=0;
+	size_t j,k,count,n,m=0;
+	size_t curdirlen = strlen(curdir);
+	size_t downloaddirlen=strlen(downloaddir);
+	size_t lscmd_suffix_wplen = strlen(lscmd_suffix_wp);
 
-	if((i<0)||(i>8)) i=1;
-	snprintf(c, sizeof(c), "%d",i);
-	memcpy(cmd+37,c,1);
-	memcpy(cmd+38,t,12);
 	
-	//PRINT("cmd=%s",cmd);
+	if(i<=0) i=1;
+	snprintf(c, sizeof(c), "%d",i+3);
+	memcpy(cmd+8,curdir,curdirlen);
+	memcpy(cmd+8+curdirlen,t,11);
+	memcpy(cmd+8+curdirlen+11,c,strlen(c));
+	memcpy(cmd+8+curdirlen+11+strlen(c),lscmd_suffix_wp,lscmd_suffix_wplen);
+	cmd[8+curdirlen+11+strlen(c)+lscmd_suffix_wplen]='\0';
+
+	PRINT("%s",cmd);
 	char *out=(char*)malloc(2048);
 	
 	if(quotes==false){
-		memcpy(out,"/var/res/share/autotox/",23);
-		m=23;
+		//memcpy(out,curdir,curdirlen);
+		//memcpy(out+curdirlen,"/",1);
+		//m=curdirlen+1;
+		memcpy(out,downloaddir,downloaddirlen);
+		memcpy(out+downloaddirlen,"/",1);
+		m=downloaddirlen+1;
 	}
 	else {
-	   memcpy(out,"/var/res/share/autotox/'",24);
-	   m=24;
+	   //memcpy(out,"/var/res/share/autotox/'",24);
+	   //m=24;
+	   memcpy(out,curdir,curdirlen);
+	   memcpy(out+curdirlen,"/\"",2);
+	   m=curdirlen+2;
    }
 	
 	
@@ -614,21 +714,42 @@ char *listDirWPath(int i, bool quotes) {
 		while (!feof(stream)){
 			if (fgets(buffer, 256, stream) != NULL){
 				//PRINT("ExecutionRes:%s %d",buffer,(unsigned)strlen(buffer));
+				if(*(buffer)=='d'){
+					free(out);
+					return NULL;
+				}
 				n = strlen(buffer);
+				count=0;
+				k=0;
+				for(j=0;j<n;j++){
+					if((*(buffer+j)==' ')&&(k==0)) {
+						k=1;
+						count++;
+					}
+					else if((*(buffer+j)!=' ')&&(k==1)) {
+						k=0;
+						if(count==8) {k=j; break;}						
+					}
+				}
 				//PRINT("%ldExecutionRes:%s\n",n,buffer);
 				//writetologfile(buffer);
-				memcpy(out+m,buffer,n);
-				m+=n;
+				//memcpy(out+m,buffer+2,n-3);
+				//m+=n-3;
+				memcpy(out+m,buffer+j,n-j-1);
+				m+=n-j-1;
 			}
 		}
 		pclose(stream);
 	}
 
-    if(quotes==false)
-		out[m-1]='\0';
-	else{
-		out[m-1]='\'';
+    if(quotes==false){
+		//memcpy(out+m,"\"",1);
+		//m++;
 		out[m]='\0';
+	}
+	else{
+		out[m]='"';
+		out[m+1]='\0';
 	}
 	
 	return out;
@@ -641,17 +762,350 @@ char *listDirWPath(int i, bool quotes) {
  ******************************************************************************/
 
 int delFile(int i) {
-	char *pathfile=listDirWPath(i,true);
+	char *pathfile=getFileWPath(i,true);
 	
 	char cmd[256]="rm ";
 	int l=strlen(pathfile);
 	memcpy(cmd+3,pathfile,l);
 	cmd[3+l]='\0';
-	PRINT("%s",cmd);
+	PRINT("delfile cmd [%s]",cmd);
 	
 	popen(cmd, "r");
 	
 	free(pathfile);
+}
+
+/*******************************************************************************
+ *
+ *  Find Dir
+ *
+ ******************************************************************************/
+
+int removespaces(char *name){
+	char temp[512];
+	size_t len = strlen(name);
+	int i,f=0;
+	for(i=0;i<len;i++){
+		if(*(name+i)==' '){
+			//PRINT("phat hien quote 1");
+			f++;
+		}
+		else break;
+	}
+	memcpy(temp,name+f,len-f);
+	memcpy(name,temp,len-f);
+	*(name+len-f)='\0';
+	return f;
+}
+
+int removequotes(char *name){
+	char temp[512];
+	size_t len = strlen(name);
+	int i,f=0,l=0;
+	for(i=0;i<len;i++){
+		if(*(name+i)=='"'){
+			//PRINT("phat hien quote 1");
+			f++;
+		}
+		else break;
+	}
+	memcpy(temp,name+f,len-f);
+	temp[len-f]='\0';
+	for(i=0;i<len-f;i++){
+		if(*(temp+i)=='"'){
+			//PRINT("phat hien quote 2");
+			l++;
+		}
+	}
+	memcpy(name,temp,strlen(temp)-l);
+	*(name+strlen(temp)-l)='\0';
+	return (f+l);
+}
+
+int findDir(char *dirname, size_t msglen) {
+	char quote[]="\"";
+	char strslash[]="/\"";
+	char strslashwoquote[]="/";
+	char findstr[] = "find ";
+	char args[] = " -maxdepth 1 -type d -name ";
+	char cmd[17408];
+	char buffer[256];
+	FILE * stream;
+	
+	msglen -= removespaces(dirname);
+	msglen -= removequotes(dirname);
+	PRINT("name sau khi loai quotes [%s] voi leng=%ld",dirname,strlen(dirname));
+	
+	size_t findstrlen=strlen(findstr);
+	size_t curdirlen=strlen(curdir);
+	size_t argslen = strlen(args);
+	size_t dirnamelen = strlen(dirname);
+
+	memcpy(cmd,findstr,findstrlen);
+	memcpy(cmd + findstrlen,curdir,curdirlen);
+	memcpy(cmd + findstrlen + curdirlen,args,argslen);
+	memcpy(cmd + findstrlen + curdirlen + argslen,quote, 1);
+	memcpy(cmd + findstrlen + curdirlen + argslen+1,dirname, dirnamelen);
+	memcpy(cmd + findstrlen + curdirlen + argslen+dirnamelen+1,quote, 1);
+	cmd[findstrlen+curdirlen+argslen+dirnamelen+2] = '\0';
+	
+	//PRINT("cmd=%s",cmd);
+	
+	int n=0;
+	
+	stream = popen(cmd, "r");
+	if (stream) {
+		while (!feof(stream)){
+			if (fgets(buffer, 256, stream) != NULL){
+				n = strlen(buffer);
+			}
+		}
+		pclose(stream);
+	}
+	
+	if(n!=0){
+
+		size_t strslashlen=strlen(strslash);
+		size_t quotelen=strlen(quote);
+		size_t relativedirlen=strlen(relativedir);
+		size_t downloaddirlen=strlen(downloaddir);
+		size_t strslashwoquotelen=strlen(strslashwoquote);
+		
+		curdir=(char*)realloc(curdir,curdirlen+strslashlen+quotelen+msglen-3 + 1);
+		memcpy(curdir+curdirlen,strslash,strslashlen);
+		memcpy(curdir+curdirlen + strslashlen,dirname,msglen-3);
+		memcpy(curdir+curdirlen + strslashlen + msglen-3,quote,quotelen);
+		curdir[curdirlen+strslashlen+quotelen+msglen-3]='\0';
+		
+		downloaddir=(char*)realloc(downloaddir,downloaddirlen+strslashwoquotelen+msglen-3 + 1);
+		memcpy(downloaddir+downloaddirlen,strslashwoquote,strslashwoquotelen);
+		memcpy(downloaddir+downloaddirlen + strslashwoquotelen,dirname,msglen-3);
+		downloaddir[downloaddirlen+strslashwoquotelen+msglen-3]='\0';
+		
+		relativedir=(char*)realloc(relativedir,relativedirlen+strslashwoquotelen+msglen-3 + 1);
+		memcpy(relativedir+relativedirlen,strslashwoquote,strslashwoquotelen);
+		memcpy(relativedir+relativedirlen + strslashwoquotelen,dirname,msglen-3);
+		relativedir[relativedirlen+strslashwoquotelen+msglen-3]='\0';
+		
+		PRINT("curdir [%s]",curdir);
+		PRINT("downloaddir [%s]",downloaddir);
+		PRINT("relativedir [%s]",relativedir);
+	}
+	
+	return n;
+}
+
+
+int findRelativeDir(char *msg,size_t msglen) {
+	int i,j,n=0,m=0,mwoquote=0,ksize=0,k=0,ksizewoquote=0,kwoquote=0,f=0,l=0;
+	char lastdirname[256];
+	char lastdirnamewoquote[256];
+	char fullpath[16384];
+	char fullpathwoquote[16384];
+	char slashstr[] = "/";
+	char quote[] = "\"";
+	
+	char findstr[] = "find ";
+	char args[] = " -maxdepth 1 -type d -name ";
+	char cmd[17408];
+	char buffer[256];
+	FILE * stream;
+	
+	size_t slashstrlen=strlen(slashstr);
+	size_t quotelen=strlen(quote);
+	
+	memset(lastdirname,0,256);
+	memcpy(fullpath,maindir,maindirlen);
+    m+=maindirlen;
+    memcpy(fullpathwoquote,maindir,maindirlen);
+    mwoquote+=maindirlen;
+
+    int p1=-1,p2=-1;
+    
+	for(i=4;i<msglen;i++){
+		if(msg[i]=='/'){
+				p2=p1;
+				p1=i;
+				if((p1-p2)==1) return 0;
+				if(p2!=-1){
+					size_t lastdirnamelen=strlen(lastdirname);
+					if(lastdirnamelen==0){
+						memcpy(lastdirname+k,quote,quotelen);
+						f=0;l=0;
+						for(j=1;j<=p1-p2-1;j++){
+							if(*(msg+p2+j)=='"') f++;
+							else break;
+						}
+						for(j=p1-p2-1;j>=1;j--){
+							if(*(msg+p2+j)=='"') l++;
+							else break;
+						}
+						//PRINT("1:%ld %ld",f,l);
+						memcpy(lastdirname+k+quotelen,msg+p2+1+f,p1-p2-1-f-l);
+						memcpy(lastdirname+k+quotelen+p1-p2-1-f-l,quote,quotelen);
+						k+=2*quotelen+p1-p2-1-f-l;
+						ksize=2*quotelen+p1-p2-1-f-l;
+						
+						memcpy(lastdirnamewoquote+kwoquote,msg+p2+1+f,p1-p2-1-f-l);
+						kwoquote+=p1-p2-1-f-l;
+						ksizewoquote=p1-p2-1-f-l;
+				    }
+					else{
+						memcpy(fullpath+m,slashstr,slashstrlen);
+						memcpy(fullpath+m+slashstrlen,lastdirname,ksize);
+						m+=slashstrlen+ksize;
+						
+						memcpy(fullpathwoquote+mwoquote,slashstr,slashstrlen);
+						memcpy(fullpathwoquote+mwoquote+slashstrlen,lastdirnamewoquote,ksizewoquote);
+						mwoquote+=slashstrlen+ksizewoquote;
+						
+						memset(lastdirname,0,256);
+						k=0;kwoquote=0;
+						memcpy(lastdirname+k,quote,quotelen);
+						f=0;l=0;
+						for(j=1;j<=p1-p2-1;j++){
+							if(*(msg+p2+j)=='"') f++;
+							else break;
+						}
+						for(j=p1-p2-1;j>=1;j--){
+							if(*(msg+p2+j)=='"') l++;
+							else break;
+						}
+						//PRINT("2:%ld %ld",f,l);
+						memcpy(lastdirname+k+quotelen,msg+p2+1+f,p1-p2-1-f-l);
+						memcpy(lastdirname+k+quotelen+p1-p2-1-f-l,quote,quotelen);
+						k+=2*quotelen+p1-p2-1-f-l;
+						ksize=2*quotelen+p1-p2-1-f-l;
+						
+						memcpy(lastdirnamewoquote+kwoquote,msg+p2+1+f,p1-p2-1-f-l);
+						kwoquote+=p1-p2-1-f-l;
+						ksizewoquote=p1-p2-1-f-l;
+					}
+				}
+		}
+	}
+	
+	f=0;l=0;
+	if(p1==-1) return 0;
+	if(p1<msglen-1){
+		p2=p1;
+		p1=msglen;
+		if(k==0){
+			memcpy(lastdirname+k,quote,quotelen);
+			f=0;l=0;
+			for(j=1;j<=p1-p2-1;j++){
+				if(*(msg+p2+j)=='"') f++;
+				else break;
+			}
+			for(j=p1-p2-1;j>=1;j--){
+				if(*(msg+p2+j)=='"') l++;
+				else break;
+			}
+			//PRINT("1:%ld %ld",f,l);
+			memcpy(lastdirname+k+quotelen,msg+p2+1+f,p1-p2-1-f-l);
+			memcpy(lastdirname+k+quotelen+p1-p2-1-f-l,quote,quotelen);
+			k+=2*quotelen+p1-p2-1-f-l;
+			ksize=2*quotelen+p1-p2-1-f-l;
+			
+			memcpy(lastdirnamewoquote+kwoquote,msg+p2+1+f,p1-p2-1-f-l);
+			kwoquote+=p1-p2-1-f-l;
+			ksizewoquote=p1-p2-1-f-l;
+		}
+		else{
+			memcpy(fullpath+m,slashstr,slashstrlen);
+			memcpy(fullpath+m+slashstrlen,lastdirname,ksize);
+			m+=slashstrlen+ksize;
+			
+			memcpy(fullpathwoquote+mwoquote,slashstr,slashstrlen);
+			memcpy(fullpathwoquote+mwoquote+slashstrlen,lastdirnamewoquote,ksizewoquote);
+			mwoquote+=slashstrlen+ksizewoquote;
+						
+			memset(lastdirname,0,256);
+			k=0;kwoquote=0;
+			memcpy(lastdirname+k,quote,quotelen);
+			f=0;l=0;
+			for(j=1;j<=p1-p2-1;j++){
+				if(*(msg+p2+j)=='"') f++;
+				else break;
+			}
+			for(j=p1-p2-1;j>=1;j--){
+				if(*(msg+p2+j)=='"') l++;
+				else break;
+			}
+			//PRINT("2:%ld %ld",f,l);
+			memcpy(lastdirname+k+quotelen,msg+p2+1+f,p1-p2-1-f-l);
+			memcpy(lastdirname+k+quotelen+p1-p2-1-f-l,quote,quotelen);
+			k+=2*quotelen+p1-p2-1-f-l;
+			ksize=2*quotelen+p1-p2-1-f-l;
+			
+			memcpy(lastdirnamewoquote+kwoquote,msg+p2+1+f,p1-p2-1-f-l);
+			kwoquote+=p1-p2-1-f-l;
+			ksizewoquote=p1-p2-1-f-l;
+		}
+	}
+	
+	lastdirname[k]='\0';
+	lastdirnamewoquote[kwoquote]='\0';
+	fullpath[m]='\0';
+	fullpathwoquote[mwoquote]='\0';
+	PRINT("%s",lastdirname);
+	PRINT("%s",fullpath);
+	PRINT("%s",lastdirnamewoquote);
+	PRINT("%s",fullpathwoquote);
+	
+	//create cmd
+	size_t findstrlen=strlen(findstr);
+	size_t fullpathlen=strlen(fullpath);
+	size_t fullpathwoquotelen=strlen(fullpathwoquote);
+	size_t argslen = strlen(args);
+	size_t dirnamelen = strlen(lastdirname);
+	size_t dirnamewoquotelen = strlen(lastdirnamewoquote);
+	
+	memcpy(cmd,findstr,findstrlen);
+	memcpy(cmd + findstrlen,fullpath,fullpathlen);
+	memcpy(cmd + findstrlen + fullpathlen,args,argslen);
+	memcpy(cmd + findstrlen + fullpathlen + argslen,lastdirname, dirnamelen);
+	cmd[findstrlen+fullpathlen+argslen+dirnamelen] = '\0';
+	
+	PRINT("%s",cmd);
+	
+	n=0;
+	
+	stream = popen(cmd, "r");
+	if (stream) {
+		while (!feof(stream)){
+			if (fgets(buffer, 256, stream) != NULL){
+				n = strlen(buffer);
+			}
+		}
+		pclose(stream);
+	}
+	
+    if(n!=0){
+			curdir=(char*)realloc(curdir,fullpathlen+slashstrlen+dirnamelen+1);
+			memcpy(curdir,fullpath,fullpathlen);
+			memcpy(curdir+fullpathlen,slashstr,slashstrlen);
+			memcpy(curdir+fullpathlen+slashstrlen,lastdirname,dirnamelen);
+			curdir[fullpathlen+slashstrlen+dirnamelen]='\0';
+			PRINT("curdir=%s",curdir);
+			
+			downloaddir=(char*)realloc(downloaddir,fullpathwoquotelen + slashstrlen+dirnamewoquotelen + 1);
+			memcpy(downloaddir,fullpathwoquote,fullpathwoquotelen);
+			memcpy(downloaddir+fullpathwoquotelen,slashstr,slashstrlen);
+			memcpy(downloaddir+fullpathwoquotelen+slashstrlen,lastdirnamewoquote,dirnamewoquotelen);
+			downloaddir[fullpathwoquotelen + slashstrlen+ dirnamewoquotelen]='\0';
+			PRINT("downloaddir=%s",downloaddir);
+			
+			relativedir=(char*)realloc(relativedir,4+fullpathwoquotelen - maindirlen + slashstrlen+dirnamewoquotelen + 1);
+			memcpy(relativedir,"root",4);
+			memcpy(relativedir+4,fullpathwoquote+maindirlen,fullpathwoquotelen - maindirlen);
+			memcpy(relativedir+4+fullpathwoquotelen - maindirlen,slashstr,slashstrlen);
+			memcpy(relativedir+4+fullpathwoquotelen - maindirlen+slashstrlen,lastdirnamewoquote,dirnamewoquotelen);
+			relativedir[4+fullpathwoquotelen - maindirlen + slashstrlen+ dirnamewoquotelen]='\0';
+			PRINT("relativedir=%s",relativedir);
+	}
+	
+	return n;
 }
 
 /*******************************************************************************
@@ -665,69 +1119,121 @@ void startsendfile(Tox *m, uint32_t friendnum, char *pathtofile);//need for frie
 void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, const uint8_t *message,
                                    size_t length, void *user_data)
 {
-    struct Friend *f = getfriend(friend_num);
-    if (!f) return;
-    if (type != TOX_MESSAGE_TYPE_NORMAL) {
-        INFO("* receive MESSAGE ACTION type from %s, no supported", f->name);
-        return;
-    }
+		struct Friend *f = getfriend(friend_num);
+		if (!f) return;
+		if (type != TOX_MESSAGE_TYPE_NORMAL) {
+			INFO("* receive MESSAGE ACTION type from %s, no supported", f->name);
+			return;
+		}
 
-    char *msg = genmsg(&f->hist, GUEST_MSG_PREFIX "%.*s", getftime(), f->name, (int)length, (char*)message);
-    if (GEN_INDEX(friend_num, TALK_TYPE_FRIEND) == TalkingTo) {
-        PRINT("%s", msg);
-    } else {
-		char s[5];
-		memcpy(s, (char*)message,4);
-		s[4]='\0';
-		//PRINT("%s", s);
+		char s[3];
+		memcpy(s, (char*)message,2);
+		s[2]='\0';
+		
 		if(strcmp(s,"ls")==0){
-			//writetologfile("rm2");
-			char *dircon=listDir();
-			//writetologfile("mm0");
+			int n=getDirEleSize();
+			maxelecount=n-3;
+			curelecount=4;
+			char *dircon=listDir(curelecount);
 			tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)dircon, strlen(dircon), NULL);
 			free(dircon);
-			//writetologfile("em2");
-		}else if(strcmp(s,"delf")==0){
-			writetologfile("rm4");
-			char c[2];
-		    memcpy(c, (char*)(message+5),1);
-		    c[1]='\0';
-		    PRINT("c=%s", c);
-		    int i = (int)strtol(c, NULL, 10);
-		    PRINT("i=%d", i);
-		    if(i==0) i=1;
-			delFile(i);
-			writetologfile("mm0");
-			char *m="Has run del command at remote";
-			tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)m, strlen(m), NULL);
-			writetologfile("em4");
-		}else if(strcmp(s,"down")==0){
-			//writetologfile("rm3");
-			char c[2];
-		    memcpy(c, (char*)(message+5),1);
-		    c[1]='\0';
-		    //PRINT("c=%s", c);
-		    int i = (int)strtol(c, NULL, 10);
-		    //PRINT("i=%d", i);
-		    if(i==0) i=1;
-			char *dircon=listDirWPath(i,false);
-			//writetologfile(dircon);
-			//PRINT("%s", dircon);
-			startsendfile(tox,friend_num,dircon);
-			free(dircon);
-			//writetologfile("em3");
-		} else{
-			//writetologfile("rm1");
-			INFO("* receive message from %s, use `/go <contact_index>` to talk\n",f->name);
-			//writetologfile("mm0");
-			char *ipaddr=getIpAddr();
-			//writetologfile("mm1");
-			tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)ipaddr, strlen(ipaddr), NULL);
-			//writetologfile("mm2");
-			free(ipaddr);
-			//writetologfile("em1");
 		}
-    }
+		else if(strcmp(s,"cd")==0){
+			char ss[8];
+			memcpy(ss, (char*)message,7);
+			ss[7]='\0';
+			
+			if(strcmp(ss,"cd root")==0){
+				//PRINT("vaoday");
+				size_t msglen=strlen((char*)message);
+				if(msglen < 8) return;
+				int out1=findRelativeDir((char*)message,msglen);
+				if(out1!=0){
+					tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "done", 4, NULL);
+				}
+			}
+			else{
+					char dirname2[512];
+					size_t msglen=strlen((char*)message);
+					if(msglen < 4) return;
+					memcpy(dirname2, (char*)(message+3), msglen-3);
+					dirname2[msglen-3]='\0';
+					
+					int out2=findDir(dirname2,msglen);
+					if(out2!=0){
+						tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "done", 4, NULL);
+					}
+				}
+		}else{
+			char s2[4];
+			memcpy(s2, (char*)message,3);
+			s2[3]='\0';
+
+			if(strcmp(s2,"pwd")==0){
+				tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)relativedir, strlen(relativedir), NULL);
+			}
+			else{
+				char s3[5];
+				memcpy(s3, (char*)message,4);
+				s3[4]='\0';
+				if(strcmp(s3,"next")==0){
+					curelecount+=10;
+					if(curelecount <= maxelecount + 3){
+						char *dircon=listDir(curelecount);
+						tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)dircon, strlen(dircon), NULL);
+						free(dircon);
+					}
+				}
+				else if(strcmp(s3,"back")==0){
+					if(strcmp(curdir,maindir)==0)
+						tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "in root", 7, NULL);
+					else{
+						size_t t=getPosOfLastDir(curdir);
+						curdir[t]='\0';
+						//PRINT("curdir=%s",curdir);
+						t=getPosOfLastDir(relativedir);
+						relativedir[t]='\0';
+						t=getPosOfLastDir(downloaddir);
+						downloaddir[t]='\0';
+						//PRINT("relativedir=%s",relativedir);
+						tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "done", 4, NULL);
+					}
+				}
+				else if(strcmp(s3,"delf")==0){
+					char c[2];
+					memcpy(c, (char*)(message+5),1);
+					c[1]='\0';
+					//PRINT("c=%s", c);
+					int i = (int)strtol(c, NULL, 10);
+					//PRINT("i=%d", i);
+					if(i==0) i=1;
+					delFile(i);
+					tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "done", 4, NULL);
+				}
+				else if(strcmp(s3,"down")==0){
+					char c[16];
+					size_t msglen=strlen((char*)message);
+					if(msglen<6) return;
+					
+					memcpy(c, (char*)(message+5),msglen-5);
+					c[msglen-5]='\0';
+					int i = (int)strtol(c, NULL, 10);
+					if(i==0) i=1;
+					PRINT("%d", i);
+					char *dircon=getFileWPath(i,false);
+					//writetologfile(dircon);
+					if(dircon!=NULL){
+						PRINT("file need down: [%s]", dircon);
+						startsendfile(tox,friend_num,dircon);
+						free(dircon);
+					}
+				} else{
+					char *ipaddr=getIpAddr();
+					tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)ipaddr, strlen(ipaddr), NULL);
+					free(ipaddr);
+				}
+			}
+		}
 }
 
 /*
@@ -1629,7 +2135,7 @@ void onFileRecv(Tox *m, uint32_t friendnum, uint32_t filenumber, uint64_t file_s
     
     size_t path_len = name_length;
 
-    snprintf(file_path, file_path_buf_size, "/var/res/share/autotox/%s", filename);
+    snprintf(file_path, file_path_buf_size, "%s/%s",downloaddir, filename);
 
 
     if (path_len >= file_path_buf_size || path_len >= sizeof(ft->file_path) || name_length >= sizeof(ft->file_name)) {
@@ -1722,14 +2228,12 @@ void on_file_recv_chunk_cb(Tox *m, uint32_t friendnumber, uint32_t filenumber, u
 /*******************************************************************************************************/
 
 void firstlog(){
-	char* pathlogfile="/home/dungnt/MyLog/alog.txt";
 	FILE *fp = fopen(pathlogfile, "w");
 	fprintf(fp, "Begin\n");
     fclose(fp);
 }
 
 void writetologfile(char *msg){
-	char* pathlogfile="/home/dungnt/MyLog/alog.txt";
 	FILE *fp = fopen(pathlogfile, "a");
 	/*struct timeval tv;
 
@@ -1898,6 +2402,17 @@ int main(int argc, char **argv) {
 		memset(buffer,0,1024);
     }
 
+    //set up curdir
+    maindirlen=strlen(maindir);
+    curdir=(char*)malloc(maindirlen+1);
+    memcpy(curdir,maindir,maindirlen);
+    curdir[maindirlen]='\0';
+    downloaddir=(char*)malloc(maindirlen+1);
+    memcpy(downloaddir,maindir,maindirlen);
+    downloaddir[maindirlen]='\0';
+    relativedir=(char*)malloc(5);
+    memcpy(relativedir,"root",4);
+    relativedir[4]='\0';
     
     INFO("* Waiting to be online ...");
 
