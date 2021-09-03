@@ -1162,7 +1162,13 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
 			if(strcmp(ss,"cd root")==0){
 				//PRINT("vaoday");
 				size_t msglen=strlen((char*)message);
-				if(msglen < 8) return;
+				if(msglen == 7) {
+					curdir[maindirlen]='\0';
+					relativedir[4]='\0';
+					downloaddir[maindirlen]='\0';
+					tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "done", 4, NULL);
+					return;
+				}
 				int out1=findRelativeDir((char*)message,msglen);
 				if(out1!=0){
 					tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "done", 4, NULL);
