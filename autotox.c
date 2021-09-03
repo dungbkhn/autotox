@@ -24,7 +24,8 @@
 static const char pathlogfile[]="/home/dungnt/MyLog/alog.txt";
 static char maindir[]="/var/res/share";
 static const char lscmd_prefix[]="/ -all | sed -n ";
-static const char lscmd_suffix[]="p | awk '{$a=\"\";$b=\"\";$c=\"\";$d=\"\";$e=\"\";$f=\"\";$g=\"\"} 1' a=2 b=3 c=4 d=5 e=6 f=7 g=8 | awk '{ sub(/drwxr-xr-x$/, \"dir\", $1) sub(/-rwxr-xr-x$/, \"---\", $1) }1'";
+//static const char lscmd_suffix[]="p | awk '{$a=\"\";$b=\"\";$c=\"\";$d=\"\";$e=\"\";$f=\"\";$g=\"\"} 1' a=2 b=3 c=4 d=5 e=6 f=7 g=8 | awk '{ sub(/drwxr-xr-x$/, \"dir\", $1) sub(/-rwxr-xr-x$/, \"---\", $1) }1'";
+static const char lscmd_suffix[]="p";
 //static const char lscmd_suffix_wp[]="p | awk '{$a=\"\";$b=\"\";$c=\"\";$d=\"\";$e=\"\";$f=\"\";$g=\"\"} 1' a=2 b=3 c=4 d=5 e=6 f=7 g=8 | awk '{ sub(/drwxr-xr-x$/, \"d\", $1) sub(/-rwxr-xr-x$/, \"f\", $1) }1'";
 static const char lscmd_suffix_wp[]="p";
 static char *curdir;
@@ -583,7 +584,7 @@ char *getIpAddr() {
 char *listDir(int k) {
 	FILE * stream;
 	char buffer[256];
-	size_t n,m=0;
+	size_t j,flag=0,fsize=0,n,m=0;
 	int i=k-3;
 	char count[64];
 	char *out=(char*)malloc(2048);
@@ -613,13 +614,28 @@ char *listDir(int k) {
 		while (!feof(stream)){
 			if (fgets(buffer, 256, stream) != NULL){
 				n = strlen(buffer);
-				snprintf(count, sizeof(count), " %d ",i);
+				if(flag==0){
+					flag=1;
+					for(j=0;j<n;j++){
+						if(*(buffer+j)==':') fsize=j;
+					}
+				}
+				snprintf(count, sizeof(count), "%d ",i);
 				i++;
 				memcpy(out+m,count,strlen(count));
 				m+=strlen(count);
 				memset(count,0,32);
-				memcpy(out+m,buffer,n);
-				m+=n;
+				if(*(buffer)=='d'){
+					memcpy(out+m,"dir ",4);
+					m+=4;
+				}
+				else{
+					memcpy(out+m,"--- ",4);
+					m+=4;
+				}
+				//PRINT("%s",buffer);
+				memcpy(out+m,buffer+fsize+4,n-fsize-4);
+				m+=n-fsize-4;
 			}
 		}
 		pclose(stream);
