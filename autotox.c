@@ -583,13 +583,14 @@ char *getIpAddr() {
 
 char *listDir(int k) {
 	FILE * stream;
-	char buffer[256];
+	char buffer[512];
 	size_t j,flag=0,fsize=0,n,m=0;
 	int i=k-3;
 	char count[64];
 	char *out=(char*)malloc(2048);
 	char lsstr[] = "ls ";
 	char lsmaindir[512];
+	char lsdirgetsize[512];
 	char k_str[32];
 	char nextstr[]="-- press next to see more --";
     snprintf(k_str, sizeof(k_str), "%d,%d",k,k+9);
@@ -607,19 +608,41 @@ char *listDir(int k) {
     memcpy(lsmaindir+lenlsstr+lencurdir + lenlscmd_prefix + k_strlen,lscmd_suffix,lenlscmd_suffix);
     
     lsmaindir[lenlsstr+lencurdir+lenlscmd_prefix+k_strlen+lenlscmd_suffix]='\0';
-    //PRINT("%s",lsmaindir);
     
-	stream = popen(lsmaindir, "r");
+    memcpy(lsdirgetsize,"ls -all ",8);
+    memcpy(lsdirgetsize+8,curdir,lencurdir);
+    memcpy(lsdirgetsize+8+lencurdir," | sed -n 2p",12);
+    lsdirgetsize[8+lencurdir+12]='\0';
+    
+    //PRINT("%s",lsdirgetsize);
+    
+    stream = popen(lsdirgetsize, "r");
 	if (stream) {
 		while (!feof(stream)){
-			if (fgets(buffer, 256, stream) != NULL){
-				n = strlen(buffer);
-				if(flag==0){
-					flag=1;
+			if (fgets(buffer, 512, stream) != NULL){
+					n = strlen(buffer);
 					for(j=0;j<n;j++){
 						if(*(buffer+j)==':') fsize=j;
 					}
-				}
+					
+					break;
+			}
+		}
+	}
+	
+	//PRINT("fsize:%d",fsize);
+	
+	stream = popen(lsmaindir, "r");
+	if (stream) {
+		while (!feof(stream)){
+			if (fgets(buffer, 512, stream) != NULL){
+				n = strlen(buffer);
+				//if(flag==0){
+				//	flag=1;
+				//	for(j=0;j<n;j++){
+				//		if(*(buffer+j)==':') fsize=j;
+				//	}
+				//}
 				snprintf(count, sizeof(count), "%d ",i);
 				i++;
 				memcpy(out+m,count,strlen(count));
@@ -690,7 +713,7 @@ char *getFileWPath(int i, bool quotes) {
 	char t[64]="/ | sed -n ";
 	char c[16];
 	FILE * stream;
-	char buffer[256];
+	char buffer[512];
 	size_t j,k,count,n,m=0;
 	size_t curdirlen = strlen(curdir);
 	size_t downloaddirlen=strlen(downloaddir);
@@ -728,7 +751,7 @@ char *getFileWPath(int i, bool quotes) {
 	stream = popen(cmd, "r");
 	if (stream) {
 		while (!feof(stream)){
-			if (fgets(buffer, 256, stream) != NULL){
+			if (fgets(buffer, 512, stream) != NULL){
 				//PRINT("ExecutionRes:%s %d",buffer,(unsigned)strlen(buffer));
 				if(*(buffer)=='d'){
 					free(out);
@@ -780,7 +803,7 @@ char *getFileWPath(int i, bool quotes) {
 int delFile(int i) {
 	char *pathfile=getFileWPath(i,true);
 	
-	char cmd[256]="rm ";
+	char cmd[512]="rm ";
 	int l=strlen(pathfile);
 	memcpy(cmd+3,pathfile,l);
 	cmd[3+l]='\0';
@@ -845,7 +868,7 @@ int findDir(char *dirname, size_t msglen) {
 	char findstr[] = "find ";
 	char args[] = " -maxdepth 1 -type d -name ";
 	char cmd[17408];
-	char buffer[256];
+	char buffer[17408];
 	FILE * stream;
 	
 	msglen -= removespaces(dirname);
@@ -872,7 +895,7 @@ int findDir(char *dirname, size_t msglen) {
 	stream = popen(cmd, "r");
 	if (stream) {
 		while (!feof(stream)){
-			if (fgets(buffer, 256, stream) != NULL){
+			if (fgets(buffer, 17408, stream) != NULL){
 				n = strlen(buffer);
 			}
 		}
@@ -924,7 +947,7 @@ int findRelativeDir(char *msg,size_t msglen) {
 	char findstr[] = "find ";
 	char args[] = " -maxdepth 1 -type d -name ";
 	char cmd[17408];
-	char buffer[256];
+	char buffer[17408];
 	FILE * stream;
 	
 	size_t slashstrlen=strlen(slashstr);
@@ -1090,7 +1113,7 @@ int findRelativeDir(char *msg,size_t msglen) {
 	stream = popen(cmd, "r");
 	if (stream) {
 		while (!feof(stream)){
-			if (fgets(buffer, 256, stream) != NULL){
+			if (fgets(buffer, 17408, stream) != NULL){
 				n = strlen(buffer);
 			}
 		}
