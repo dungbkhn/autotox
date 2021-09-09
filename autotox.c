@@ -585,12 +585,12 @@ char *listDir(int k) {
 	FILE * stream;
 	char buffer[512];
 	size_t j,flag=0,fsize=0,n,m=0;
-	int i=k-3;
+	int i=k-3,s1,s2,numsp;
 	char count[64];
 	char *out=(char*)malloc(2048);
 	char lsstr[] = "ls ";
 	char lsmaindir[512];
-	char lsdirgetsize[512];
+	//char lsdirgetsize[512];
 	char k_str[32];
 	char nextstr[]="-- press next to see more --";
     snprintf(k_str, sizeof(k_str), "%d,%d",k,k+9);
@@ -609,12 +609,14 @@ char *listDir(int k) {
     
     lsmaindir[lenlsstr+lencurdir+lenlscmd_prefix+k_strlen+lenlscmd_suffix]='\0';
     
+    /*
     memcpy(lsdirgetsize,"ls -all ",8);
     memcpy(lsdirgetsize+8,curdir,lencurdir);
     memcpy(lsdirgetsize+8+lencurdir," | sed -n 2p",12);
     lsdirgetsize[8+lencurdir+12]='\0';
     
-    //PRINT("%s",lsdirgetsize);
+     
+    PRINT("%s",lsdirgetsize);
     
     stream = popen(lsdirgetsize, "r");
 	if (stream) {
@@ -630,19 +632,23 @@ char *listDir(int k) {
 		}
 	}
 	
-	//PRINT("fsize:%d",fsize);
+	PRINT("fsize:%d",fsize);
+	*/
 	
+	s1=0;s2=0;numsp=0;
 	stream = popen(lsmaindir, "r");
 	if (stream) {
 		while (!feof(stream)){
 			if (fgets(buffer, 512, stream) != NULL){
 				n = strlen(buffer);
-				//if(flag==0){
-				//	flag=1;
-				//	for(j=0;j<n;j++){
-				//		if(*(buffer+j)==':') fsize=j;
-				//	}
-				//}
+				if(flag==0){
+					flag=1;
+					for(j=0;j<n;j++){
+						if((*(buffer+j)==' ')&&(s1==0)) {s1=1;numsp++;}
+						else if((*(buffer+j)!=' ')&&(s1==1)) s1=0;
+						if(numsp==8) {fsize=j;break;}
+					}
+				}
 				snprintf(count, sizeof(count), "%d ",i);
 				i++;
 				memcpy(out+m,count,strlen(count));
@@ -657,8 +663,8 @@ char *listDir(int k) {
 					m+=4;
 				}
 				//PRINT("%s",buffer);
-				memcpy(out+m,buffer+fsize+4,n-fsize-4);
-				m+=n-fsize-4;
+				memcpy(out+m,buffer+fsize+1,n-fsize-1);
+				m+=n-fsize-1;
 			}
 		}
 		pclose(stream);
