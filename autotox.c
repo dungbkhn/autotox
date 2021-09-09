@@ -22,7 +22,7 @@
 #define UNUSED_VAR(x) ((void) x)
 
 static const char pathlogfile[]="/home/dungnt/MyLog/alog.txt";
-static char maindir[]="/var/res/share";
+static char maindir[]="/var/res";
 static const char lscmd_prefix[]="/ -all | sed -n ";
 //static const char lscmd_suffix[]="p | awk '{$a=\"\";$b=\"\";$c=\"\";$d=\"\";$e=\"\";$f=\"\";$g=\"\"} 1' a=2 b=3 c=4 d=5 e=6 f=7 g=8 | awk '{ sub(/drwxr-xr-x$/, \"dir\", $1) sub(/-rwxr-xr-x$/, \"---\", $1) }1'";
 static const char lscmd_suffix[]="p";
@@ -1229,6 +1229,15 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
 					int i = (int)strtol(c, NULL, 10);
 					//PRINT("i=%d", i);
 					if(i==0) i=1;
+					char backupfolderpath[]="/var/res/backup";
+					char cmppath[64];
+					memcpy(cmppath,downloaddir,strlen(backupfolderpath));
+					cmppath[strlen(backupfolderpath)]='\0';
+					if(strcmp(cmppath,backupfolderpath)==0){
+						PRINT("ko the del file o backup");
+						tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "can not delete file in backup folder", 36, NULL);
+						return;
+					}
 					delFile(i);
 					tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "done", 4, NULL);
 				}
@@ -2157,8 +2166,19 @@ void onFileRecv(Tox *m, uint32_t friendnum, uint32_t filenumber, uint64_t file_s
     
     size_t path_len = name_length;
 
+	char backupfolderpath[]="/var/res/backup";
+	char cmppath[64];
+	memcpy(cmppath,downloaddir,strlen(backupfolderpath));
+	cmppath[strlen(backupfolderpath)]='\0';
+	PRINT("[%s][%s]",cmppath,backupfolderpath);
+	if(strcmp(cmppath,backupfolderpath)==0){
+		PRINT("ko the up len backup");
+		close_file_transfer(m, ft, TOX_FILE_CONTROL_CANCEL, "File transfer failed: Can not up to backup folder.");
+		return;
+	}
+		
     snprintf(file_path, file_path_buf_size, "%s/%s",downloaddir, filename);
-
+   
 
     if (path_len >= file_path_buf_size || path_len >= sizeof(ft->file_path) || name_length >= sizeof(ft->file_name)) {
 		writetologfile("File transfer failed: File path too long.");
