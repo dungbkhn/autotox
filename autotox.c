@@ -2195,13 +2195,19 @@ void onFileRecv(Tox *m, uint32_t friendnum, uint32_t filenumber, uint64_t file_s
     
     size_t path_len = name_length;
 
+	char rootpath[]="/var/res";
 	char backupfolderpath[]="/var/res/backup";
 	char cmppath[64];
 	memcpy(cmppath,downloaddir,strlen(backupfolderpath));
 	cmppath[strlen(backupfolderpath)]='\0';
 	PRINT("[%s][%s]",cmppath,backupfolderpath);
+	
+	if(strcmp(cmppath,rootpath)==0){
+		close_file_transfer(m, ft, TOX_FILE_CONTROL_CANCEL, "File transfer failed: Can not up to root folder.");
+		return;
+	}
+	
 	if(strcmp(cmppath,backupfolderpath)==0){
-		PRINT("ko the up len backup");
 		close_file_transfer(m, ft, TOX_FILE_CONTROL_CANCEL, "File transfer failed: Can not up to backup folder.");
 		return;
 	}
