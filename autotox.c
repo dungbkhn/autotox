@@ -21,6 +21,9 @@
 
 #define UNUSED_VAR(x) ((void) x)
 
+static const char allcmd[]="ls-view file\nfr-view friend\ncd-go to folder\ncd root-go to root\nadd-add friend id\nmadd-change add msg\npwd-where you are\ncmd-list all commands\nvadd-view add msg\ndelu-del user\nnext-show next files\nback-back to parent folder\ndelf-del files\ndown-download files\nreq-show requests";
+static char *add_msg=NULL;
+static const char pathaddmsgfile[]="./addmsgdata.tox";
 static const char pathlogfile[]="/home/dungnt/MyLog/alog.txt";
 static char maindir[]="/var/res";
 static const char lscmd_prefix[]="/ -all | sed -n ";
@@ -154,6 +157,7 @@ enum TALK_TYPE { TALK_TYPE_FRIEND, TALK_TYPE_COUNT, TALK_TYPE_NULL = UINT32_MAX 
 uint32_t TalkingTo = TALK_TYPE_NULL;
 
 void writetologfile(char *msg);
+
 
 char *getLastDir(const char *path)
 {
@@ -1160,7 +1164,10 @@ int findRelativeDir(char *msg,size_t msglen) {
  ******************************************************************************/
  
 void startsendfile(Tox *m, uint32_t friendnum, char *pathtofile);//need for friend_message_cb
-
+char *auto_contacts() ;
+void setnew_add_msg(char *m);
+int auto_del(char *args, uint32_t friend_num);
+void auto_add(char *id);
 void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, const uint8_t *message,
                                    size_t length, void *user_data)
 {
@@ -1175,7 +1182,12 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
 		memcpy(s, (char*)message,2);
 		s[2]='\0';
 		
-		if(strcmp(s,"ls")==0){
+		if (strcmp(s,"fr")==0){
+			char *s=auto_contacts();
+			tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, s, strlen(s), NULL);
+			free(s);
+		}
+		else if(strcmp(s,"ls")==0){
 			int n=getDirEleSize();
 			maxelecount=n-3;
 			curelecount=4;
@@ -1220,14 +1232,62 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
 			memcpy(s2, (char*)message,3);
 			s2[3]='\0';
 
-			if(strcmp(s2,"pwd")==0){
+			if(strcmp(s2,"req")==0){
+				struct Request *rq;
+				if(requests!=NULL){
+					for (rq = requests;rq != NULL; rq = rq->next) {
+						tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)rq->msg, strlen(rq->msg), NULL);
+					}  
+				}
+			}
+			else if(strcmp(s2,"add")==0){
+				size_t msglen=strlen((char*)message);
+				if(msglen != 80) {tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "fail", 4, NULL); return;}
+				char ss[msglen];
+				memcpy(ss, (char*)message+4,76);
+				ss[76]='\0';
+				auto_add(ss);
+				tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "adddone", 7, NULL);
+			}
+			else if(strcmp(s2,"pwd")==0){
 				tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)relativedir, strlen(relativedir), NULL);
+			}
+			else if(strcmp(s2,"cmd")==0){
+				tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)allcmd, strlen(allcmd), NULL);
 			}
 			else{
 				char s3[5];
 				memcpy(s3, (char*)message,4);
 				s3[4]='\0';
-				if(strcmp(s3,"next")==0){
+				if(strcmp(s3,"vadd")==0){
+					tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)add_msg, strlen(add_msg), NULL);
+				}
+				else if(strcmp(s3,"madd")==0){
+					size_t msglen=strlen((char*)message);
+					if(msglen > 256) msglen=256;
+					char ss[msglen];
+					memcpy(ss, (char*)message+5,msglen-5);
+					ss[msglen-5]='\0';
+					setnew_add_msg(ss);
+					tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "done", 4, NULL);
+				} 
+				else if(strcmp(s3,"delu")==0){
+					size_t msglen=strlen((char*)message);
+					if(msglen > 8) msglen=8;
+					char ss[msglen];
+					memcpy(ss, (char*)message+5,msglen-5);
+					ss[msglen-5]='\0';
+					/*char *out=(char*)malloc(32);
+					out[0]='\0';
+					snprintf(out,30," %d %d ",TalkingTo,friend_num);
+					tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, out, strlen(out), NULL);
+					free(out);*/
+					int k=auto_del(ss,friend_num);
+					if(k==1) tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "done", 4, NULL);
+					else if (k==0) tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "can not delete yourself", 23, NULL);
+					else tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, "fail", 4, NULL);
+				}
+				else if(strcmp(s3,"next")==0){
 					curelecount+=10;
 					if(curelecount <= maxelecount + 3){
 						char *dircon=listDir(curelecount);
@@ -1352,7 +1412,8 @@ void friend_request_cb(Tox *tox, const uint8_t *public_key, const uint8_t *messa
     req->next = requests;
     requests = req;
     
-   if (strcmp((char*)message, "autotox") == 0){
+   //if (strcmp((char*)message, "autotox") == 0){
+   if (strcmp((char*)message, (char*)add_msg) == 0){
 	   INFO("* xin lam ban ok, tu dong autoaccept");
 	   auto_accept(1,"1",true);
 	   update_savedata_file();
@@ -1596,6 +1657,24 @@ void command_add(int narg, char **args) {
     addfriend(friend_num);
 }
 
+void auto_add(char *id) {
+    char *hex_id = id;
+    char *msg = "";
+
+    uint8_t *bin_id = hex2bin(hex_id);
+    TOX_ERR_FRIEND_ADD err;
+    uint32_t friend_num = tox_friend_add_norequest(tox, bin_id, &err);
+    free(bin_id);
+
+    if (err != TOX_ERR_FRIEND_ADD_OK) {
+        ERROR("! add friend failed, errcode:%d",err);
+        return;
+    }
+
+    addfriend(friend_num);
+    update_savedata_file();
+}
+
 void command_del(int narg, char **args) {
     uint32_t contact_idx;
     if (!str2uint(args[0], &contact_idx)) goto FAIL;
@@ -1613,21 +1692,69 @@ FAIL:
     WARN("^ Invalid contact index");
 }
 
-void auto_del(char *args) {
+int auto_del(char *args, uint32_t fnum) {
     uint32_t contact_idx;
     if (!str2uint(args, &contact_idx)) goto FAIL;
     uint32_t num = INDEX_TO_NUM(contact_idx);
     switch (INDEX_TO_TYPE(contact_idx)) {
         case TALK_TYPE_FRIEND:
-            if (delfriend(num)) {
-                tox_friend_delete(tox, num, NULL);
-                return;
-            }
+			if (GEN_INDEX(num, TALK_TYPE_FRIEND) != fnum) {
+				if (delfriend(num)) {
+					tox_friend_delete(tox, num, NULL);
+					update_savedata_file();
+					return 1;
+				} else return -1;
+			} else return 0;
             break;
        
     }
 FAIL:
     WARN("^ Invalid contact index");
+    return -1;
+}
+
+
+char *auto_contacts() {
+    struct Friend *f = friends;
+    int n,total=0,i=0,dem=0;
+    char *s=NULL,**temp=NULL;
+    
+
+    for (;f != NULL; f = f->next) {
+    	dem++;
+    }
+    
+	temp=(char**)malloc(dem*sizeof(char*));
+	if(temp==NULL){PRINT("Error in memory allocation\n");exit(0);}
+    f = friends;
+
+    for (;f != NULL; f = f->next) {
+        temp[i]=(char*)malloc(2048);
+        char *hex = bin2hex(f->pubkey, sizeof(f->pubkey));
+		n=sprintf (temp[i], "%d %3d  %15.15s  %12.12s %s \n",dem,GEN_INDEX(f->friend_num, TALK_TYPE_FRIEND), f->name, connection_enum2text(f->connection),hex);
+		free(hex);
+		temp[i][n]='\0';
+		total += n;
+		i++;
+    }  
+
+	if((s = (char*)malloc(total+1)) != NULL){
+		s[0] = '\0';   // ensures the memory is an empty string
+		for (i=0; i<dem; i++) {
+			strcat(s,temp[i]);
+		}
+	} else {
+		PRINT("Error in memory allocation\n");
+		exit(0);
+	}
+	
+	for (i=0; i<dem; i++) {
+			free(temp[i]);
+	}
+	
+	free(temp);
+
+    return s;  
 }
 
 void command_contacts(int narg, char **args) {
@@ -1698,7 +1825,7 @@ FAIL:
 
 
 void auto_accept(int narg, char *args, bool is_accept) {
-	PRINT("in auto_accept narg=%d %s",narg,args);
+	//PRINT("in auto_accept narg=%d %s",narg,args);
     if (narg == 0) {
         struct Request * req = requests;
         for (;req != NULL;req=req->next) {
@@ -2300,6 +2427,46 @@ void on_file_recv_chunk_cb(Tox *m, uint32_t friendnumber, uint32_t filenumber, u
     onFileRecvChunk(m, friendnumber, filenumber, position, (char *) data, length);
 }
 
+
+/*******************************************************************************************************
+/                                         ADD MESSAGE
+/*******************************************************************************************************/
+
+void setup_add_msg(){
+	FILE *fp = fopen(pathaddmsgfile, "r");
+	char fileText [2048];
+	if(fp!=NULL){
+		fread(fileText, 2048, 1, fp);
+		fclose(fp);
+		//PRINT("addmsg:%s\n",fileText);
+		add_msg=(char*)malloc(strlen(fileText));
+		memcpy(add_msg,fileText,strlen(fileText));
+		PRINT("add_msg=%s",add_msg);
+	}
+	else{
+		FILE *fp = fopen(pathaddmsgfile, "w");
+		if(fp!=NULL){
+			fprintf(fp, "autotox");
+			fclose(fp);
+			add_msg=(char*)malloc(strlen("autotox"));
+			memcpy(add_msg,"autotox",strlen("autotox"));
+			PRINT("add_msg=%s",add_msg);
+		}
+	}
+}
+
+void setnew_add_msg(char *m){
+	FILE *fp = fopen(pathaddmsgfile, "w");
+	if(fp!=NULL){
+		fprintf(fp, m);
+		fclose(fp);
+		if(add_msg!=NULL) free(add_msg);
+		add_msg=(char*)malloc(strlen(m));
+		memcpy(add_msg,m,strlen(m));
+		PRINT("add_msg=%s",add_msg);
+	}
+}
+
 /*******************************************************************************************************
 /                                         LOGS
 /*******************************************************************************************************/
@@ -2429,8 +2596,12 @@ int main(int argc, char **argv) {
 
   //  setup_arepl();
     setup_tox();
-    //auto_del("0");
-            
+    setup_add_msg();
+    
+    //auto_del("2");
+    //auto_del("3");
+    //auto_del("4");
+
             
     firstlog();
     uint8_t tox_id_bin[TOX_ADDRESS_SIZE];
