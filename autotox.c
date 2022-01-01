@@ -2467,8 +2467,9 @@ void setnew_add_msg(char *m){
 		fprintf(fp, m);
 		fclose(fp);
 		if(add_msg!=NULL) free(add_msg);
-		add_msg=(char*)malloc(strlen(m));
+		add_msg=(char*)malloc(strlen(m)+1);
 		memcpy(add_msg,m,strlen(m));
+		add_msg[strlen(m)]='\0';
 		PRINT("add_msg=%s",add_msg);
 	}
 }
