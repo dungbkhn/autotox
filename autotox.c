@@ -21,7 +21,7 @@
 
 #define UNUSED_VAR(x) ((void) x)
 
-static const char allcmd[]="ls-view file\nfr-view friend\ncd-go to folder\ncd root-go to root\nadd-add friend id\nmadd-change add msg\npwd-where you are\ncmd-list all commands\nvadd-view add msg\ndelu-del user\nnext-show next files\nback-back to parent folder\ndelf-del files\ndown-download files\nreq-show requests";
+static const char allcmd[]="ls: view folder's content\nfr: view friend\ncd <folder name>: go to folder\ncd root: go to root\nmyid: show autotox's id\nadd <id>: add friend id\ncmsg <msg>: change added-friend msg\npwd: where you are\ncmd: list all commands\nvmsg: view added-friend msg\nrmvf <friend's num>: remove friend by number\nnext: show next 10-files\nback: back to parent folder\ndelf <file num>: del files\ndown <file num>: download files\nreq: show requests";
 static char *add_msg=NULL;
 static const char pathaddmsgfile[]="./addmsgdata.tox";
 static const char pathlogfile[]="/home/dungnt/MyLog/alog.txt";
@@ -1177,7 +1177,7 @@ void startsendfile(Tox *m, uint32_t friendnum, char *pathtofile);//need for frie
 char *auto_contacts() ;
 void setnew_add_msg(char *m);
 int auto_del(char *args, uint32_t friend_num);
-void auto_add(char *id);
+int auto_add(char *id);
 void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, const uint8_t *message,
                                    size_t length, void *user_data)
 {
@@ -1256,8 +1256,11 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
 				char ss[msglen];
 				memcpy(ss, (char*)message+4,76);
 				ss[76]='\0';
-				auto_add(ss);
-				tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)"adddone", 7, NULL);
+				int addres=auto_add(ss);
+                if(addres==1)
+				    tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)"add done", 8, NULL);
+                else
+                    tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)"add fail", 8, NULL);
 			}
 			else if(strcmp(s2,"pwd")==0){
 				tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)relativedir, strlen(relativedir), NULL);
@@ -1269,10 +1272,17 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
 				char s3[5];
 				memcpy(s3, (char*)message,4);
 				s3[4]='\0';
-				if(strcmp(s3,"vadd")==0){
+				if(strcmp(s3,"vmsg")==0){
 					tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)add_msg, strlen(add_msg), NULL);
 				}
-				else if(strcmp(s3,"madd")==0){
+                else if(strcmp(s3,"myid")==0){
+                    uint8_t my_tox_id_bin[TOX_ADDRESS_SIZE];
+                    tox_self_get_address(tox, my_tox_id_bin);
+                    char *myhexid = bin2hex(my_tox_id_bin, sizeof(my_tox_id_bin));
+                    tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)myhexid, 76, NULL);
+                    free(myhexid);
+                }
+				else if(strcmp(s3,"cmsg")==0){
 					size_t msglen=strlen((char*)message);
 					if(msglen > 256) msglen=256;
 					char ss[msglen];
@@ -1281,7 +1291,7 @@ void friend_message_cb(Tox *tox, uint32_t friend_num, TOX_MESSAGE_TYPE type, con
 					setnew_add_msg(ss);
 					tox_friend_send_message(tox, friend_num, TOX_MESSAGE_TYPE_NORMAL, (uint8_t*)"done", 4, NULL);
 				} 
-				else if(strcmp(s3,"delu")==0){
+				else if(strcmp(s3,"rmvf")==0){
 					size_t msglen=strlen((char*)message);
 					if(msglen > 8) msglen=8;
 					char ss[msglen];
@@ -1662,7 +1672,7 @@ void command_add(int narg, char **args) {
     addfriend(friend_num);
 }
 
-void auto_add(char *id) {
+int auto_add(char *id) {
     char *hex_id = id;
     //char *msg = "";
 
@@ -1673,11 +1683,12 @@ void auto_add(char *id) {
 
     if (err != TOX_ERR_FRIEND_ADD_OK) {
         ERROR("! add friend failed, errcode:%d",err);
-        return;
+        return 0;
     }
 
     addfriend(friend_num);
     update_savedata_file();
+    return 1;
 }
 
 void command_del(int narg, char **args) {
