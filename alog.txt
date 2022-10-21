@@ -1,0 +1,13 @@
+Begin
+ myTOXID:
+ 34EA7ED0BCA9D4FBF3B003BFBC535CC258A7A5DD7CA64DB0E3202127735DDA480F4FEA3C70FB
+ autotox
+ autobot
+ #Friends(conctact_index|name|connection|status message):
+   6                             Of  
+   5     minitox_dung            Of  
+   4        atoxDung2            Of  Brought to you live, by aTox
+   3              bbb            Of  Toxing on qTox
+   2         aToxDung            Of  Brought to you live, by aTox
+   1                e            Of  Toxing on qTox
+   0   dungUbuntuqtox            Of  Toxing on qTox
