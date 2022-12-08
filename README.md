@@ -1,5 +1,5 @@
-#### autotox
-
+#### autotox 
+This is based on minitox <br />
 Make a autotox for remote survey on /var/lib which is local machine directory <br />
 Step1: Local site: create /var/lib and /var/lib/share and /var/lib/backup <br />
 Step2: Local site: go to autotox folder,run: make clean and then run: make <br />
