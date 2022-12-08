@@ -1,5 +1,3 @@
-
-
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -24,6 +22,7 @@
 static const char allcmd[]="ls: view folder's content\nfr: view friend\ncd <folder name>: go to folder\ncd root: go to root\nmyid: show autotox's id\nadd <id>: add friend id\ncmsg <msg>: change added-friend msg\npwd: where you are\ncmd: list all commands\nvmsg: view added-friend msg\nrmvf <friend's num>: remove friend by number\nnext: show next 10-files\nback: back to parent folder\ndelf <file num>: del files\ndown <file num>: download files\nreq: show requests";
 static char *add_msg=NULL;
 static const char pathaddmsgfile[]="./addmsgdata.tox";
+static const char pathaddbtfile[]="./bt.tox";
 static const char pathlogfile[]="./alog.txt";
 static char maindir[]="/var/res";
 static const char lscmd_prefix[]="/ -all | sed -n ";
@@ -49,20 +48,7 @@ static int curelecount=0;
 const char *savedata_filename = "./savedata.tox";
 const char *savedata_tmp_filename = "./savedata.tox.tmp";
 
-struct DHT_node {
-    const char *ip;
-    uint16_t port;
-    const char key_hex[TOX_PUBLIC_KEY_SIZE*2 + 1];
-};
 
-struct DHT_node bootstrap_nodes[] = {
-
-    // Setup tox bootrap nodes
-
-    {"node.tox.biribiri.org",      33445, "F404ABAA1C99A9D37D61AB54898F56793E1DEF8BD46B1038B9D822E8460FAB67"},
-    {"128.199.199.197",            33445, "B05C8869DBB4EDDD308F43C1A974A20A725A36EACCA123862FDE9945BF9D3E09"},
-    {"2400:6180:0:d0::17a:a001",   33445, "B05C8869DBB4EDDD308F43C1A974A20A725A36EACCA123862FDE9945BF9D3E09"},
-};
 
 #define LINE_MAX_SIZE 512  // If input line's length surpassed this value, it will be truncated.
 
@@ -99,6 +85,26 @@ struct DHT_node bootstrap_nodes[] = {
 #define WARN(_fmt,...) COLOR_PRINT("\x01b[33m", _fmt, ##__VA_ARGS__) // yellow
 #define ERROR(_fmt,...) COLOR_PRINT("\x01b[31m", _fmt, ##__VA_ARGS__) // red
 
+struct DHT_node {
+    char *ip;
+    uint16_t port;
+    char *key_hex;
+};
+
+/*
+struct DHT_node bootstrap_nodes[] = {
+
+    // Setup tox bootrap nodes
+    
+        {"91.219.59.156",                          33445, "8E7D0B859922EF569298B4D261A8CCB5FEA14FB91ED412A7603A585A25698832"},
+        {"tox.initramfs.io",           33445, "3F0A45A268367C1BEA652F258C85F4A66DA76BCAA667A49E770BCC4917AB6A25"},
+        {"2a03:b0c0:3:d0::ac:5001",     33445, "CD133B521159541FB1D326DE9850F5E56A6C724B5B8E5EB5CD8D950408E95707"},
+
+	
+};
+*/
+
+struct DHT_node *bootstrap_nodes;
 
 /*******************************************************************************
  *
@@ -1552,9 +1558,11 @@ void update_savedata_file(void)
 
 void bootstrap(void)
 {
-    for (size_t i = 0; i < sizeof(bootstrap_nodes)/sizeof(struct DHT_node); i ++) {
-        uint8_t *bin = hex2bin(bootstrap_nodes[i].key_hex);
-        tox_bootstrap(tox, bootstrap_nodes[i].ip, bootstrap_nodes[i].port, bin, NULL);
+	printf("bootstrap enabled\n");
+    for (size_t i = 0; i < 3; i ++) {
+		printf("%s---%d---%s",(bootstrap_nodes+i)->ip,(bootstrap_nodes+i)->port,(bootstrap_nodes+i)->key_hex);
+        uint8_t *bin = hex2bin((bootstrap_nodes+i)->key_hex);
+        tox_bootstrap(tox, (bootstrap_nodes+i)->ip, (bootstrap_nodes+i)->port, bin, NULL);
         free(bin);
     }
 }
@@ -1563,7 +1571,7 @@ void setup_tox(void)
 {
     create_tox();
     init_friends();
-    //bootstrap();
+    bootstrap();
 
     ////// register callbacks
 
@@ -1813,11 +1821,10 @@ void command_go(int narg, char **args) {
 FAIL:
     WARN("^ Invalid contact index");
 }
-*/
 
 void command_go(int narg, char **args) {}
 
-/*
+
 void cmd_savefile(Tox *m, struct Friend *f, int argc, char **argv);
 
 void command_savefile(int narg, char **args) {
@@ -1876,6 +1883,7 @@ FAIL:
     WARN("Invalid request index");
 }
 
+/*
 void _command_accept(int narg, char **args, bool is_accept) {
 	PRINT("in _command_accept narg=%d %s",narg,args[0]);
     if (narg == 0) {
@@ -1911,6 +1919,7 @@ void _command_accept(int narg, char **args, bool is_accept) {
 FAIL:
     WARN("Invalid request index");
 }
+
 
 void command_accept(int narg, char **args) {
     _command_accept(narg, args, true);
@@ -1994,7 +2003,7 @@ void command_help(int narg, char **args){
         printf("%-16s%s\n", commands[i].name, commands[i].desc);
     }
 }
-
+*/
 
 /*******************************************************************************
  *
@@ -2058,7 +2067,6 @@ void command_help(int narg, char **args){
 
 void startsendfile(Tox *m, uint32_t friendnum, char *pathtofile) //tuong dong cmd_sendfile o toxic
 {
-
     const char *errmsg = NULL;
     struct Friend *f = getfriend(friendnum); 
 
@@ -2424,6 +2432,41 @@ void on_file_recv_chunk_cb(Tox *m, uint32_t friendnumber, uint32_t filenumber, u
     onFileRecvChunk(m, friendnumber, filenumber, position, (char *) data, length);
 }
 
+/*******************************************************************************************************
+                                         SETUP BOOTSTRAP
+*******************************************************************************************************/
+int setup_bootstrap(){
+	FILE *textfile = fopen(pathaddbtfile, "r");
+    char line[LINE_MAX_SIZE];
+    int i=0,j=0;
+    
+    if(textfile == NULL)
+        return 0;
+        
+    bootstrap_nodes = (struct DHT_node*)malloc(sizeof(struct DHT_node)*3);
+    
+    while(fgets(line, LINE_MAX_SIZE, textfile)){
+		//printf("%dline:%s",i,line);
+		if(j==3) break;
+		if(i==0) {
+			(bootstrap_nodes+j)->ip=(char*)malloc(strlen(line));
+			memcpy((bootstrap_nodes+j)->ip,line,strlen(line));
+			(bootstrap_nodes+j)->ip[strlen(line)-1] = '\0';
+		}
+		else if (i==1) {
+			(bootstrap_nodes+j)->port = strtol(line, NULL, 10);
+		}
+		else if (i==2) {
+			(bootstrap_nodes+j)->key_hex=(char*)malloc(strlen(line));
+			memcpy((bootstrap_nodes+j)->key_hex,line,strlen(line));
+		}
+		i++;
+		if(i>2) {i=0;j++;}
+    }
+     
+    fclose(textfile);
+    return 1;
+}
 
 /*******************************************************************************************************
                                          ADD MESSAGE
@@ -2444,7 +2487,7 @@ void setup_add_msg(){
 		add_msg=(char*)malloc(fileSize+1);
 		memcpy(add_msg,fileText,fileSize);
 		add_msg[fileSize]='\0';
-		PRINT("N1:add_msg=%s",add_msg);
+		PRINT("N1:Message needed to add autobox from remoteside:add_msg=%s",add_msg);
 	}
 	else{
 		FILE *fp = fopen(pathaddmsgfile, "w");
@@ -2514,7 +2557,7 @@ char *poptok(char **strp) {
     return save;
 }
 
-
+/*
 void repl_iterate(void){
     static char buf[128];
     static char line[LINE_MAX_SIZE];
@@ -2585,7 +2628,7 @@ void repl_iterate(void){
     arepl_reprint(async_repl);
 }
 
-
+*/
 
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
@@ -2595,10 +2638,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    //fputs("Type `/guide` to print the guide.\n", stdout);
-    //fputs("Type `/help` to print command list.\n\n",stdout);
-
-  //  setup_arepl();
+    setup_bootstrap();
     setup_tox();
     setup_add_msg();
     
@@ -2614,6 +2654,7 @@ int main(int argc, char **argv) {
 	writetologfile(hex);
 	hex=bin2hex(tox_id_bin, sizeof(tox_id_bin));
     writetologfile(hex);
+    printf("id_for_add(76 hex charater ready for add):%s\n",hex);
     
     //change name
     hex="autotox";
@@ -2672,10 +2713,10 @@ int main(int argc, char **argv) {
     uint32_t msecs_check_live = 0;
     
     while (1) {
-        if (msecs >= AREPL_INTERVAL) {
+        /*if (msecs >= AREPL_INTERVAL) {
             msecs = 0;
-//            repl_iterate();
-        }
+            repl_iterate();
+        } */
         
         
         tox_iterate(tox, NULL);
