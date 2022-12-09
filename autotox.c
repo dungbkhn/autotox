@@ -899,7 +899,7 @@ int findDir(char *dirname, size_t msglen) {
 	
 	msglen -= removespaces(dirname);
 	msglen -= removequotes(dirname);
-	PRINT("name sau khi loai quotes [%s] voi leng=%u",dirname,strlen(dirname));
+	//PRINT("name sau khi loai quotes [%s] voi leng=%u",dirname,strlen(dirname));
 	
 	size_t findstrlen=strlen(findstr);
 	size_t curdirlen=strlen(curdir);
@@ -2375,7 +2375,7 @@ void onFileRecv(Tox *m, uint32_t friendnum, uint32_t filenumber, uint64_t file_s
 {
     UNUSED_VAR(userdata);
 
-    PRINT("File receiving info: %d %d %d %llu %s %u\n",friendnumber,filenumber,kind,file_size,filename,filename_length);
+    //PRINT("File receiving info: %d %d %d %llu %s %u\n",friendnumber,filenumber,kind,file_size,filename,filename_length);
     onFileRecv(tox, friendnumber, filenumber, file_size, (char*)filename, filename_length);
 }
  
@@ -2504,7 +2504,7 @@ void setup_add_msg(){
 void setnew_add_msg(char *m){
 	FILE *fp = fopen(pathaddmsgfile, "w");
 	if(fp!=NULL){
-		fprintf(fp, m);
+		fprintf(fp,"%s",m);
 		fclose(fp);
 		if(add_msg!=NULL) free(add_msg);
 		add_msg=(char*)malloc(strlen(m)+1);
