@@ -19,7 +19,6 @@ do
 		fi
 	done
 
-	sleep 20m
-	echo 'dsfg' > helhe
+	sleep 1d
 done
 
