@@ -1453,6 +1453,11 @@ void self_connection_status_cb(Tox *tox, TOX_CONNECTION connection_status, void 
     char buffer[256];
     snprintf(buffer, sizeof(buffer), "%s",connection_enum2text(connection_status));
     INFO("* You are %s", buffer);
+    FILE *fp = fopen(pathaddolokfile, "w");
+    if(fp!=NULL){
+		fprintf(fp, "ok");
+		fclose(fp);
+    }
 }
 
 void on_file_recv_cb(Tox *tox, uint32_t friendnumber, uint32_t filenumber, uint32_t kind, uint64_t file_size,
