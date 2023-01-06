@@ -19,10 +19,10 @@ if [ $rs -gt 0 ] ; then
    l=$(curl https://nodes.tox.chat/ | grep -B 8 'ONLINE' | grep -o '<td>.*</td>' | sed 's/\(<td>\|<\/td>\)//g')
    echo $l
      
-   if [ -f ./testbt.txt ] ; then
-	truncate --size=0 ./testbt.txt
+   if [ -f ./bt.tox ] ; then
+	truncate --size=0 ./bt.tox
    else
-	touch ./testbt.txt
+	touch ./bt.tox
    fi
 
    num=0  
@@ -34,14 +34,14 @@ if [ $rs -gt 0 ] ; then
     t=$(( $count % 5 ))
     if [ $t -eq 0 ] ; then
 	if [ "$word" != "-" ] ; then
-		echo "$word" >> ./testbt.txt
+		echo "$word" >> ./bt.tox
 		ok=1
 	else
 		ok=0
 	fi
     elif [ $t -eq 1 ] ; then
 	if [ $ok -eq 0 ] && [ "$word" != "-" ]  ; then
-		echo "$word" >> ./testbt.txt
+		echo "$word" >> ./bt.tox
 	fi
     else
         if [ $t -eq 4 ] ; then
@@ -50,7 +50,7 @@ if [ $rs -gt 0 ] ; then
 			break
 		fi
 	else
-		echo "$word" >> ./testbt.txt
+		echo "$word" >> ./bt.tox
 	fi
     fi
    done
