@@ -3,8 +3,6 @@
 shopt -s dotglob
 shopt -s nullglob
 
-cd /home/dungnt/autotox
-
 while true
 do
         chmod 777 genbt.sh
