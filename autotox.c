@@ -21,6 +21,7 @@
 
 static const char allcmd[]="ls: view folder's content\nfr: view friend\ncd <folder name>: go to folder\ncd root: go to root\nmyid: show autotox's id\nadd <id>: add friend id\ncmsg <msg>: change added-friend msg\npwd: where you are\ncmd: list all commands\nvmsg: view added-friend msg\nrmvf <friend's num>: remove friend by number\nnext: show next 10-files\nback: back to parent folder\ndelf <file num>: del files\ndown <file num>: download files\nreq: show requests";
 static char *add_msg=NULL;
+static const char pathaddolokfile[]="./ol_ok.tox";
 static const char pathaddmsgfile[]="./addmsgdata.tox";
 static const char pathaddbtfile[]="./bt.tox";
 static const char pathlogfile[]="./alog.txt";
