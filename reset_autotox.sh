@@ -20,5 +20,6 @@ do
 	done
 
 	sleep 20m
+	echo 'dsfg' > helhe
 done
 
