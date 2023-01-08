@@ -2541,7 +2541,7 @@ void writetologfile(char *msg){
     (unsigned long long)(tv.tv_usec) / 1000;
 	*/
 	//fprintf(fp, " %s %llu\n",msg,millisecondsSinceEpoch);
-	fprintf(fp, " %s\n",msg);
+	fprintf(fp, "%s\n",msg);
        // close the file
        fclose(fp);
 }
